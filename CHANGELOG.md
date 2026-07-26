@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.12.0
+
+### Features
+
+- give gauge cards an actual gauge (`6f86952`)
+
+**Full changelog:** `v0.11.0...v0.12.0`
+
 ## v0.11.0
 
 ### Features
