@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.3
+
+### Fixes
+
+- give protocol negotiation a budget it can actually finish in (`f93375a`)
+
+**Full changelog:** `v0.5.2...v0.5.3`
+
 ## v0.5.2
 
 ### Fixes
