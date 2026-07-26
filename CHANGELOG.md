@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.1
+
+### Fixes
+
+- unbreak the iOS build, and remove the thing that keeps breaking it (`51967d0`)
+
+**Full changelog:** `v0.6.0...v0.6.1`
+
 ## v0.6.0
 
 ### Features
