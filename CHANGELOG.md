@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.2
+
+### Fixes
+
+- stop an abandoned session from sabotaging the one that replaced it (`2c97a82`)
+
+**Full changelog:** `v0.8.1...v0.8.2`
+
 ## v0.8.1
 
 ### Fixes
