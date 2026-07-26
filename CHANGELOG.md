@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.1
+
+### Fixes
+
+- hide scroll indicators on the dashboard (`d048c72`)
+
+**Full changelog:** `v0.3.0...v0.3.1`
+
 ## v0.3.0
 
 ### Features
