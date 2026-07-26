@@ -42,16 +42,20 @@ final class SessionModel {
     private var runTask: Task<Void, Never>?
 
     init() {
-        // Falls back to the standard OBD-II baseline if the bundled catalogue
-        // cannot be read, so the app still runs rather than refusing to launch.
-        let resolved: ResolvedProfile
-        do {
-            let store = try ProfileStore.bundled()
-            resolved = (try? store.resolve(id: "genesis-g70-2020-2.0t-awd"))
-                ?? (try store.resolveBaseline())
-        } catch {
-            resolved = ResolvedProfile(id: "empty", displayName: "No profile",
+        // Degrades rather than refusing to launch: an unknown vehicle still
+        // resolves against the standard OBD-II baseline, and a catalogue that
+        // cannot be read at all leaves an empty profile with no signals.
+        //
+        // Written as explicit branches because `??` is `rethrows`, so a throwing
+        // expression on its right-hand side is rejected.
+        var resolved = ResolvedProfile(id: "empty", displayName: "No profile",
                                        signals: [:], derivedSignals: [:], knownAbsent: [:])
+        if let store = try? ProfileStore.bundled() {
+            if let specific = try? store.resolve(id: "genesis-g70-2020-2.0t-awd") {
+                resolved = specific
+            } else if let baseline = try? store.resolveBaseline() {
+                resolved = baseline
+            }
         }
         profile = resolved
         profileName = resolved.displayName
