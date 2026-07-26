@@ -215,7 +215,13 @@ final class SessionModel {
         Log.info(.elm327, "Ready on \(name), protocol \(negotiated)")
         await setPhase(.ready)
 
-        await pump(driver: driver, definitions: definitions, isDemo: false, tick: nil)
+        // Ask the car what it answers, once, instead of discovering it by
+        // requesting PIDs that will never reply — every pass, forever. The
+        // bitmask this reads is already implied by the 0100 reply that
+        // negotiated the protocol a moment ago.
+        let active = await Self.supportedSubset(of: definitions, using: driver)
+
+        await pump(driver: driver, definitions: active, isDemo: false, tick: nil)
 
         await driver.stop()
     }
@@ -322,6 +328,45 @@ final class SessionModel {
     private nonisolated static func seconds(_ duration: Duration) -> Double {
         Double(duration.components.seconds)
             + Double(duration.components.attoseconds) / 1e18
+    }
+
+    // MARK: - Supported signals
+
+    /// Narrows the requested signals to the ones this vehicle reports support
+    /// for, degrading to "poll everything" if the bitmask cannot be read.
+    ///
+    /// Degrading rather than failing is deliberate: not answering `0100`-style
+    /// queries is a quirk of some clones, and it says nothing about whether the
+    /// individual PIDs work. Being unable to ask is not evidence of a "no".
+    private nonisolated static func supportedSubset(
+        of definitions: [(SignalID, SignalDefinition)],
+        using driver: ELM327Driver
+    ) async -> [(SignalID, SignalDefinition)] {
+
+        guard let supported = try? await driver.discoverSupportedPIDs() else {
+            Log.warning(.elm327, "Could not read the supported-PID bitmask; polling all "
+                        + "\(definitions.count) requested signals")
+            return definitions
+        }
+
+        let split = SupportedSignals.partition(definitions, supported: supported)
+
+        if !split.unsupported.isEmpty {
+            let names = split.unsupported.map(\.rawValue).sorted().joined(separator: ", ")
+            Log.info(.session, "Vehicle reports no support for: \(names)")
+        }
+
+        guard !split.supported.isEmpty else {
+            // Every requested signal unsupported is not a reason to poll
+            // nothing — far more likely the bitmask was misread than that the
+            // car implements none of the standard PIDs.
+            Log.warning(.session, "The bitmask claims none of the requested signals are "
+                        + "supported, which is implausible; polling all of them anyway")
+            return definitions
+        }
+
+        Log.info(.session, "Polling \(split.supported.count) of \(definitions.count) signals")
+        return split.supported
     }
 
     // MARK: - Diagnosing an empty session

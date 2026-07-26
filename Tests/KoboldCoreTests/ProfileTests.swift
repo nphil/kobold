@@ -198,3 +198,69 @@ final class BundledCatalogueTests: XCTestCase {
         XCTAssertEqual(original, decoded)
     }
 }
+
+/// Polling a PID the vehicle has said it does not implement costs a round trip
+/// and returns NO DATA on every pass, forever.
+final class SupportedSignalsTests: XCTestCase {
+
+    private func mode01(_ id: String, pid: String) -> (SignalID, SignalDefinition) {
+        (SignalID(id), SignalDefinition(id: SignalID(id), label: id, header: "7E0",
+                                        mode: "01", pid: pid, byteOffset: 0, byteCount: 1,
+                                        conversion: .identity, unit: .none,
+                                        minimum: nil, maximum: nil, redline: nil))
+    }
+
+    private func mode22(_ id: String, pid: String) -> (SignalID, SignalDefinition) {
+        (SignalID(id), SignalDefinition(id: SignalID(id), label: id, header: "7E0",
+                                        mode: "22", pid: pid, byteOffset: 0, byteCount: 1,
+                                        conversion: .identity, unit: .none,
+                                        minimum: nil, maximum: nil, redline: nil))
+    }
+
+    func testKeepsOnlySupportedMode01PIDs() {
+        let split = SupportedSignals.partition(
+            [mode01("rpm", pid: "0C"), mode01("speed", pid: "0D"), mode01("oilTemp", pid: "5C")],
+            supported: [0x0C, 0x0D]
+        )
+
+        XCTAssertEqual(split.supported.map(\.0.rawValue), ["rpm", "speed"])
+        XCTAssertEqual(split.unsupported.map(\.rawValue), ["oilTemp"])
+    }
+
+    /// The bitmasks describe standard PIDs only. Manufacturer modes are exactly
+    /// the interesting ones and no bitmask will ever mention them, so filtering
+    /// them out would silently delete the extended signals a profile exists for.
+    func testManufacturerModesArePassedThroughUnfiltered() {
+        let split = SupportedSignals.partition(
+            [mode22("clutchTemp", pid: "E001"), mode01("rpm", pid: "0C")],
+            supported: [0x0C]
+        )
+
+        XCTAssertEqual(split.supported.map(\.0.rawValue).sorted(), ["clutchTemp", "rpm"])
+        XCTAssertTrue(split.unsupported.isEmpty)
+    }
+
+    /// A malformed PID is a bug worth seeing, not one to hide by quietly
+    /// declining to poll the signal.
+    func testUnparseablePIDIsKeptRatherThanDropped() {
+        let split = SupportedSignals.partition(
+            [mode01("broken", pid: "ZZ")],
+            supported: [0x0C]
+        )
+
+        XCTAssertEqual(split.supported.map(\.0.rawValue), ["broken"])
+        XCTAssertTrue(split.unsupported.isEmpty)
+    }
+
+    func testEmptySupportedSetDropsEveryMode01Signal() {
+        let split = SupportedSignals.partition(
+            [mode01("rpm", pid: "0C"), mode22("ext", pid: "E001")],
+            supported: []
+        )
+
+        // The caller treats this as implausible and falls back; the partition
+        // itself just reports what the bitmask said.
+        XCTAssertEqual(split.supported.map(\.0.rawValue), ["ext"])
+        XCTAssertEqual(split.unsupported.map(\.rawValue), ["rpm"])
+    }
+}
