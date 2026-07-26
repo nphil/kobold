@@ -62,11 +62,18 @@ fi
 # in a subject line, or alone on its own line in a body. Matching it anywhere
 # in a body means a commit that merely *describes* the marker — release notes,
 # documentation, this script's own history — silently suppresses the release.
+#
+# Only consulted for automatic runs. A caller who asked for a specific bump has
+# said so out loud, and that must outrank a marker left in an earlier commit —
+# otherwise one deferred commit would block every manual release until the next
+# tag, with no way to override it.
 skip_marker='\[skip release\]'
-if grep -qiE "$skip_marker" <<< "$subjects" \
-    || grep -qiE "^[[:space:]]*${skip_marker}[[:space:]]*$" <<< "$bodies"; then
-    echo "NO_RELEASE"
-    exit 0
+if [[ "$force" == "auto" ]]; then
+    if grep -qiE "$skip_marker" <<< "$subjects" \
+        || grep -qiE "^[[:space:]]*${skip_marker}[[:space:]]*$" <<< "$bodies"; then
+        echo "NO_RELEASE"
+        exit 0
+    fi
 fi
 
 # Conventional Commit type prefix, e.g. "feat(core)!: ..." -> captures "feat".

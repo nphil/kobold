@@ -1,0 +1,64 @@
+# XcodeGen project definition.
+#
+# The Xcode project is generated rather than committed: a .pbxproj is unreadable
+# in review and merges badly, whereas this file is the actual source of truth.
+# CI runs `xcodegen generate` before archiving.
+#
+#   brew install xcodegen && xcodegen generate && open Kobold.xcodeproj
+
+name: Kobold
+
+options:
+  bundleIdPrefix: com.nphil
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  Kobold:
+    path: .
+
+targets:
+  Kobold:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: Kobold
+        product: KoboldCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Kobold
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        # Without this, every animation is capped at 60fps on iPhone even on
+        # ProMotion hardware. It is opt-in because high refresh costs battery.
+        CADisableMinimumFrameDurationOnPhone: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiredDeviceCapabilities:
+          - armv7
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nphil.kobold
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # The package builds in Swift 6 language mode; the app target stays on 5
+        # for now so strict-concurrency diagnostics in UI code are a deliberate
+        # migration rather than a blocker on the first build.
+        SWIFT_VERSION: "5.0"
+        # The app is distributed unsigned and signed on-device by Feather, so
+        # the build must never expect a signing identity.
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+        TARGETED_DEVICE_FAMILY: "1,2"

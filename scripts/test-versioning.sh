@@ -99,6 +99,13 @@ commit "fix: small change"
 expect "forced major overrides the computed bump" "2.0.0" "major"
 expect "forced minor overrides the computed bump" "1.1.0" "minor"
 
+# A deferred commit must not be able to block a release forever: an explicit
+# bump is a human saying "ship it now" and outranks a marker left earlier.
+fresh && git tag v1.0.0
+commit "feat: deferred while CI was red [skip release]"
+expect "marker still skips an automatic run" "NO_RELEASE"
+expect "explicit bump overrides the marker" "1.1.0" "minor"
+
 echo
 echo "  ${passed} passed, ${failed} failed"
 [[ "$failed" -eq 0 ]]

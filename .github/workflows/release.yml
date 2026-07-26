@@ -137,11 +137,13 @@ jobs:
       - uses: actions/checkout@v4
       - id: check
         run: |
-          if ls *.xcodeproj *.xcworkspace >/dev/null 2>&1; then
+          # The Xcode project is generated from project.yml, so that file — not
+          # a committed .xcodeproj — is what signals an app target exists.
+          if [[ -f project.yml ]] || ls *.xcodeproj *.xcworkspace >/dev/null 2>&1; then
             echo "has_app=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_app=false" >> "$GITHUB_OUTPUT"
-            echo "No Xcode project yet — skipping the IPA build." >> "$GITHUB_STEP_SUMMARY"
+            echo "No app target yet — skipping the IPA build." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   ipa:
@@ -161,21 +163,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve scheme
-        id: scheme
-        run: |
-          set -euo pipefail
-          project="$(ls -d *.xcodeproj | head -1)"
-          scheme="$(basename "$project" .xcodeproj)"
-          echo "project=$project" >> "$GITHUB_OUTPUT"
-          echo "scheme=$scheme"   >> "$GITHUB_OUTPUT"
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
 
       - name: Archive (unsigned)
         run: |
           set -euo pipefail
           xcodebuild archive \
-            -project "${{ steps.scheme.outputs.project }}" \
-            -scheme "${{ steps.scheme.outputs.scheme }}" \
+            -project Kobold.xcodeproj \
+            -scheme Kobold \
             -configuration Release \
             -sdk iphoneos \
             -archivePath build/App.xcarchive \
@@ -186,11 +185,15 @@ jobs:
             CURRENT_PROJECT_VERSION="${{ github.run_number }}"
 
       - name: Package IPA
+        # An .ipa is just a zip with the .app inside a Payload directory. Built
+        # unsigned deliberately: Feather signs on-device with the developer's own
+        # certificate, so no signing identity is needed here.
         run: |
           set -euo pipefail
           mkdir -p Payload
           cp -R build/App.xcarchive/Products/Applications/*.app Payload/
           zip -qry "Kobold-${{ needs.publish.outputs.version }}-unsigned.ipa" Payload
+          ls -lh "Kobold-${{ needs.publish.outputs.version }}-unsigned.ipa"
 
       - name: Attach to release
         run: |

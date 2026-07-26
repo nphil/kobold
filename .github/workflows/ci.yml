@@ -74,6 +74,32 @@ jobs:
       - name: Test
         run: swift test
 
+  app:
+    name: Build app (iOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        # The .pbxproj is generated rather than committed — project.yml is the
+        # source of truth.
+        run: xcodegen generate
+
+      - name: Build
+        # Building on every push means a compile error in UI code shows up here
+        # rather than at release time, when it would block shipping.
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Kobold.xcodeproj \
+            -scheme Kobold \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
   scripts:
     name: Release tooling
     runs-on: ubuntu-latest
