@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.0
+
+### Features
+
+- live history and per-signal charts (`3b880da`)
+
+**Full changelog:** `v0.8.2...v0.9.0`
+
 ## v0.8.2
 
 ### Fixes
