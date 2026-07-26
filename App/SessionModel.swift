@@ -245,24 +245,38 @@ final class SessionModel {
             var batch: [(SignalID, Double)] = []
             batch.reserveCapacity(definitions.count)
 
+            // Failures are collected rather than discarded. `try?` here meant a
+            // session could fail with every single read erroring and no record
+            // of which signal, or why — the same blind spot the init sequence
+            // had, one layer further in.
+            var failures: [(SignalID, Error)] = []
+
             for (id, definition) in definitions {
                 guard !Task.isCancelled else { break }
-                if let value = try? await driver.read(definition) {
+                do {
+                    let value = try await driver.read(definition)
                     batch.append((id, value))
                     samplesInWindow += 1
+                } catch {
+                    failures.append((id, error))
                 }
             }
 
             if batch.isEmpty {
                 consecutiveEmptyPasses += 1
-                // A live session that stops answering entirely is a disconnect,
-                // not a slow patch — this hardware sleeps and drops the link.
+
+                // The first pass and the decisive one, and nothing between: a
+                // stuck session repeats the same line ten times a second, and
+                // the remote log is rate-limited.
+                if consecutiveEmptyPasses == 1 {
+                    Log.warning(.elm327, "Nothing answered — \(ReadFailureSummary.describe(failures))")
+                }
+
                 if consecutiveEmptyPasses >= 10, !isDemo {
-                    Log.error(.transport,
-                              "Adapter stopped responding after \(consecutiveEmptyPasses) empty passes")
-                    await setPhase(.failed("Adapter stopped responding"))
-                    await setError("The adapter stopped responding. It may have gone to sleep — "
-                                   + "unplug it and plug it back in.")
+                    Log.error(.elm327, "No signal answered in \(consecutiveEmptyPasses) passes — "
+                              + ReadFailureSummary.describe(failures))
+                    await setPhase(.failed(Self.emptySessionPhase(failures)))
+                    await setError(Self.describeEmptySession(failures))
                     break
                 }
             } else {
@@ -308,6 +322,26 @@ final class SessionModel {
     private nonisolated static func seconds(_ duration: Duration) -> Double {
         Double(duration.components.seconds)
             + Double(duration.components.attoseconds) / 1e18
+    }
+
+    // MARK: - Diagnosing an empty session
+
+    // Classification lives in KoboldCore (`ReadFailureSummary`) so it can be
+    // tested; only the user-facing wording belongs here.
+
+    private nonisolated static func emptySessionPhase(_ failures: [(SignalID, Error)]) -> String {
+        ReadFailureSummary.allReportedNoData(failures) ? "No data from the car" : "Adapter stopped responding"
+    }
+
+    private nonisolated static func describeEmptySession(_ failures: [(SignalID, Error)]) -> String {
+        if ReadFailureSummary.allReportedNoData(failures) {
+            return "Connected and the protocol negotiated, but every reading came back "
+                + "empty. The adapter is fine — the car is not sending anything. Start the "
+                + "engine and try again; most values need a running engine, not just the "
+                + "ignition."
+        }
+        return "The adapter stopped responding. It may have gone to sleep — "
+            + "unplug it and plug it back in."
     }
 
     // MARK: - Remembered protocol

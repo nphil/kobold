@@ -430,3 +430,60 @@ final class ProtocolMemoryTests: XCTestCase {
     // back to searching on its own, so the behaviour belongs to the hardware
     // rather than to code this suite could exercise.
 }
+
+/// An empty sampling pass has two very different explanations, and the advice
+/// for each is the opposite of the other's.
+final class ReadFailureSummaryTests: XCTestCase {
+
+    private func noData(_ command: String) -> Error {
+        ELM327Error.deviceError(command: command, reply: .noData)
+    }
+
+    func testGroupsFailuresByWhatTheAdapterSaid() {
+        let summary = ReadFailureSummary.describe([
+            (SignalID.rpm, noData("010C")),
+            (SignalID.speed, noData("010D")),
+            (SignalID.baro, ELM327Error.timeout(command: "0133")),
+        ])
+
+        // Grouped and alphabetised so the same failure reads identically every
+        // time, which matters when comparing two runs in a log.
+        XCTAssertEqual(summary, "NO DATA: rpm, speed; timeout: baro")
+    }
+
+    func testEmptyFailureListIsStatedRatherThanBlank() {
+        XCTAssertEqual(ReadFailureSummary.describe([]), "no signals were requested")
+    }
+
+    /// The adapter relaying "nothing here" for everything means the car is
+    /// silent, not the dongle.
+    func testAllNoDataIsRecognised() {
+        let failures: [(SignalID, Error)] = [
+            (SignalID.rpm, noData("010C")),
+            (SignalID.coolantTemp, noData("0105")),
+        ]
+        XCTAssertTrue(ReadFailureSummary.allReportedNoData(failures))
+    }
+
+    /// Strict on purpose: one timeout among the NO DATAs means the link is also
+    /// suspect, so the advice must not point confidently at the car.
+    func testOneTimeoutDisqualifiesTheNoDataDiagnosis() {
+        let failures: [(SignalID, Error)] = [
+            (SignalID.rpm, noData("010C")),
+            (SignalID.speed, ELM327Error.timeout(command: "010D")),
+        ]
+        XCTAssertFalse(ReadFailureSummary.allReportedNoData(failures))
+    }
+
+    func testNoFailuresIsNotANoDataDiagnosis() {
+        XCTAssertFalse(ReadFailureSummary.allReportedNoData([]))
+    }
+
+    func testUnrecognisedRepliesKeepTheirOwnWording() {
+        let failures: [(SignalID, Error)] = [
+            (SignalID.rpm, ELM327Error.deviceError(command: "010C", reply: .unableToConnect))
+        ]
+        XCTAssertEqual(ReadFailureSummary.describe(failures), "UNABLE TO CONNECT: rpm")
+        XCTAssertFalse(ReadFailureSummary.allReportedNoData(failures))
+    }
+}
