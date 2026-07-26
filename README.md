@@ -1,9 +1,15 @@
+<img src="Design/kobold-icon-512.png" width="112" align="right" alt="Kobold icon">
+
 # Kobold
 
 [![CI](https://github.com/nphil/kobold/actions/workflows/ci.yml/badge.svg)](https://github.com/nphil/kobold/actions/workflows/ci.yml)
 [![Release](https://github.com/nphil/kobold/actions/workflows/release.yml/badge.svg)](https://github.com/nphil/kobold/actions/workflows/release.yml)
 
 A native SwiftUI OBD‑II dashboard for iOS — built to feel like a considered instrument, not a diagnostics utility. Clean, fast, and unmistakably itself.
+
+**Install via Feather** — add this source:
+`https://raw.githubusercontent.com/nphil/kobold/main/source.json`
+*(live and subscribable now; the app appears with the first release that ships an IPA — see [docs/09](docs/09-ci-cd.md))*
 
 > **Working codename:** *Kobold* — the household/mine spirit that Germanic miners blamed for the ore that "spoiled" their smelt; the ore turned out to be cobalt, and the spirit's name stuck to the element. A small, helpful presence living inside the machine, reading what the engine is doing and telling you plainly. The name is a placeholder — rename freely.
 

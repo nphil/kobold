@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="kb-title kb-desc">
+  <title id="kb-title">Kobold</title>
+  <desc id="kb-desc">A tachometer sweep with a cobalt-lit hub — the spirit in the machine.</desc>
+
+  <!--
+    Kobold app icon.
+
+    Palette is not arbitrary: "kobold" is the origin of the word cobalt (miners
+    blamed the spirit for ore that spoiled their smelt), so cobalt carries the
+    identity. Amber is reserved exclusively for the redline, following the
+    night-driving convention that warm tones preserve dark adaptation better
+    than cool ones — the same reason it is a protected, non-themeable role in
+    the app's design tokens.
+
+    Themeable: every colour is a CSS custom property with a literal fallback.
+    Override the accent property to retint the whole mark for a given theme.
+    The prefers-color-scheme block supplies a light variant.
+
+    Graduations are placed with rotation transforms rather than precomputed
+    coordinates, so the dial geometry stays editable.
+
+    Full-bleed square on purpose — iOS applies its own squircle mask, and
+    pre-rounding here would clip twice.
+  -->
+  <style>
+    svg {
+      --kb-bg-top:    #1D222C;
+      --kb-bg-bottom: #0B0D12;
+      --kb-track:     #262D3A;
+      --kb-tick:      #616B80;
+      --kb-tick-fine: #3C4455;
+      --kb-accent:    #3B7DF7;
+      --kb-accent-lo: #1B49AE;
+      --kb-redline:   #FF8A2B;
+      --kb-needle:    #F2F5FB;
+      --kb-hub:       #0E1118;
+      --kb-core:      #CFE0FF;
+    }
+    @media (prefers-color-scheme: light) {
+      svg {
+        --kb-bg-top:    #FFFFFF;
+        --kb-bg-bottom: #DAE1EE;
+        --kb-track:     #C9D2E1;
+        --kb-tick:      #7E8AA0;
+        --kb-tick-fine: #AEB8C9;
+        --kb-accent:    #2E6BE0;
+        --kb-accent-lo: #7BA4F7;
+        --kb-redline:   #E8701A;
+        --kb-needle:    #0E1118;
+        --kb-hub:       #FFFFFF;
+        --kb-core:      #2E6BE0;
+      }
+    }
+  </style>
+
+  <defs>
+    <linearGradient id="kbBg" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="var(--kb-bg-top, #1D222C)"/>
+      <stop offset="1" stop-color="var(--kb-bg-bottom, #0B0D12)"/>
+    </linearGradient>
+
+    <!-- The sweep brightens as it climbs, so the eye travels toward the redline. -->
+    <linearGradient id="kbSweep" x1="0" y1="1" x2="0.9" y2="0">
+      <stop offset="0"   stop-color="var(--kb-accent-lo, #1B49AE)"/>
+      <stop offset="0.7" stop-color="var(--kb-accent, #3B7DF7)"/>
+      <stop offset="1"   stop-color="var(--kb-accent, #3B7DF7)"/>
+    </linearGradient>
+
+    <radialGradient id="kbGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0"   stop-color="var(--kb-accent, #3B7DF7)" stop-opacity="0.40"/>
+      <stop offset="0.4" stop-color="var(--kb-accent, #3B7DF7)" stop-opacity="0.13"/>
+      <stop offset="1"   stop-color="var(--kb-accent, #3B7DF7)" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="kbCore" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="var(--kb-core, #CFE0FF)"/>
+      <stop offset="1" stop-color="var(--kb-accent, #3B7DF7)"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#kbBg)"/>
+
+  <!-- Dial track: a 240° sweep, opening at the bottom and symmetric about the
+       vertical, so the mark sits square in the icon's optical centre. -->
+  <path d="M 217.6 682 A 340 340 0 1 1 806.4 682"
+        fill="none" stroke="var(--kb-track, #262D3A)" stroke-width="66" stroke-linecap="round"/>
+
+  <!-- Live portion, ending where the redline begins. -->
+  <path d="M 217.6 682 A 340 340 0 1 1 840.4 424"
+        fill="none" stroke="url(#kbSweep)" stroke-width="66" stroke-linecap="round"/>
+
+  <!-- Redline: the final arc. Amber, and never themed away. -->
+  <path d="M 840.4 424 A 340 340 0 0 1 806.4 682"
+        fill="none" stroke="var(--kb-redline, #FF8A2B)" stroke-width="66" stroke-linecap="round"/>
+
+  <!-- Fine graduations: instrument-grade texture at large sizes, resolving to a
+       soft inner ring when the icon is small. -->
+  <g stroke="var(--kb-tick-fine, #3C4455)" stroke-width="7" stroke-linecap="round">
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(165 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(180 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(195 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(225 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(240 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(255 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(285 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(300 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(315 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(345 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(360 512 512)"/>
+    <line x1="732" y1="512" x2="752" y2="512" transform="rotate(375 512 512)"/>
+  </g>
+
+  <!-- Major graduations. -->
+  <g stroke="var(--kb-tick, #616B80)" stroke-width="17" stroke-linecap="round">
+    <line x1="712" y1="512" x2="754" y2="512" transform="rotate(150 512 512)"/>
+    <line x1="712" y1="512" x2="754" y2="512" transform="rotate(210 512 512)"/>
+    <line x1="712" y1="512" x2="754" y2="512" transform="rotate(270 512 512)"/>
+    <line x1="712" y1="512" x2="754" y2="512" transform="rotate(330 512 512)"/>
+    <line x1="712" y1="512" x2="754" y2="512" transform="rotate(390 512 512)"/>
+  </g>
+
+  <!-- The spirit in the machine: a lit hub. -->
+  <circle cx="512" cy="512" r="250" fill="url(#kbGlow)"/>
+
+  <!-- Needle, held under load at roughly three-quarters of the sweep. The
+       counterweight stays inside the hub so the silhouette reads clean. -->
+  <g transform="translate(512 512) rotate(-42)">
+    <path d="M -44 -21 L 246 -10 L 268 0 L 246 10 L -44 21 A 22 22 0 0 1 -44 -21 Z"
+          fill="var(--kb-needle, #F2F5FB)"/>
+  </g>
+
+  <circle cx="512" cy="512" r="68" fill="var(--kb-hub, #0E1118)"/>
+  <circle cx="512" cy="512" r="68" fill="none"
+          stroke="var(--kb-accent, #3B7DF7)" stroke-width="11"/>
+  <circle cx="512" cy="512" r="27" fill="url(#kbCore)"/>
+</svg>

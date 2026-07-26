@@ -1,0 +1,11 @@
+{
+  "name": "Kobold",
+  "identifier": "com.nphil.kobold",
+  "subtitle": "A clean, native OBD-II dashboard",
+  "description": "Kobold reads your car's live telemetry over a Bluetooth OBD-II adapter and renders it as a clean, fast instrument cluster — gauges, graphs and trip logging, built natively for iOS.\n\nVehicles and adapters are data rather than hard-coded: standard OBD-II works on any car, with manufacturer-specific sensors added per vehicle profile.",
+  "iconURL": "https://raw.githubusercontent.com/nphil/kobold/main/Design/kobold-icon-512.png",
+  "website": "https://github.com/nphil/kobold",
+  "tintColor": "#3B7DF7",
+  "apps": [],
+  "news": []
+}

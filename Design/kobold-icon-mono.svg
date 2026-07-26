@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="kbn-title">
+  <title id="kbn-title">Kobold mark, monochrome</title>
+
+  <!--
+    Single-colour cut of the mark, drawn entirely in currentColor with opacity
+    carrying the tonal separation.
+
+    This is the source for iOS 26's tinted and mono icon appearances, which
+    Icon Composer derives from a Mono state rather than from the full-colour
+    art. It also serves anywhere the mark must inherit its surrounding colour:
+    a toolbar glyph, a template image, a tinted widget.
+
+    Because the redline cannot be distinguished by hue here, it is separated by
+    weight instead — full opacity against a dimmer sweep — so the "this end is
+    the limit" reading survives.
+  -->
+  <g fill="none" stroke="currentColor" stroke-linecap="round">
+    <path d="M 217.6 682 A 340 340 0 1 1 806.4 682" stroke-width="66" opacity="0.22"/>
+    <path d="M 217.6 682 A 340 340 0 1 1 840.4 424" stroke-width="66" opacity="0.72"/>
+    <path d="M 840.4 424 A 340 340 0 0 1 806.4 682" stroke-width="66" opacity="1"/>
+
+    <g stroke-width="7" opacity="0.30">
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(165 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(180 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(195 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(225 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(240 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(255 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(285 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(300 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(315 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(345 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(360 512 512)"/>
+      <line x1="732" y1="512" x2="752" y2="512" transform="rotate(375 512 512)"/>
+    </g>
+
+    <g stroke-width="17" opacity="0.55">
+      <line x1="712" y1="512" x2="754" y2="512" transform="rotate(150 512 512)"/>
+      <line x1="712" y1="512" x2="754" y2="512" transform="rotate(210 512 512)"/>
+      <line x1="712" y1="512" x2="754" y2="512" transform="rotate(270 512 512)"/>
+      <line x1="712" y1="512" x2="754" y2="512" transform="rotate(330 512 512)"/>
+      <line x1="712" y1="512" x2="754" y2="512" transform="rotate(390 512 512)"/>
+    </g>
+  </g>
+
+  <g transform="translate(512 512) rotate(-42)">
+    <path d="M -44 -21 L 246 -10 L 268 0 L 246 10 L -44 21 A 22 22 0 0 1 -44 -21 Z"
+          fill="currentColor"/>
+  </g>
+
+  <circle cx="512" cy="512" r="68" fill="none" stroke="currentColor" stroke-width="11" opacity="0.85"/>
+  <circle cx="512" cy="512" r="27" fill="currentColor"/>
+</svg>
