@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.3.1",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.3.1\n\n### Fixes\n\n- hide scroll indicators on the dashboard (`d048c72`)\n\n**Full changelog:** `v0.3.0...v0.3.1`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.3.1/Kobold-0.3.1-unsigned.ipa",
+          "size": 482307,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.3.0",
           "date": "2026-07-26",
           "localizedDescription": "## v0.3.0\n\n### Features\n\n- add the iOS app target and dashboard [skip release] (`c8eae3b`)\n\n### Fixes\n\n- correct profile fallback and import UIKit [skip release] (`f05e31a`)\n- resolve ambiguous trig overloads in the dial graduations [skip release] (`f28f86f`)\n\n**Full changelog:** `v0.2.0...v0.3.0`",
