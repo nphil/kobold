@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.0
+
+### Features
+
+- add the iOS app target and dashboard [skip release] (`c8eae3b`)
+
+### Fixes
+
+- correct profile fallback and import UIKit [skip release] (`f05e31a`)
+- resolve ambiguous trig overloads in the dial graduations [skip release] (`f28f86f`)
+
+**Full changelog:** `v0.2.0...v0.3.0`
+
 ## v0.2.0
 
 ### Features
