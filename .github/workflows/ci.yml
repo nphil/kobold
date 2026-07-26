@@ -87,9 +87,12 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           shellcheck scripts/*.sh
 
-      - name: Versioning is executable and produces a sane answer
-        # Guards against a release being blocked by a broken script only at the
-        # moment it is needed.
+      - name: Versioning regression tests
+        run: scripts/test-versioning.sh
+
+      - name: Versioning works against this repository
+        # The suite above uses synthetic histories; this checks the real one, so
+        # a release is never blocked by a script that only fails here.
         run: |
           set -euo pipefail
           version="$(scripts/next-version.sh)"

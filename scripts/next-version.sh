@@ -58,8 +58,13 @@ if [[ "$count" -eq 0 ]]; then
     exit 0
 fi
 
-# An explicit opt-out anywhere in the range wins.
-if grep -qiE '\[skip release\]' <<< "$subjects$bodies"; then
+# An explicit opt-out wins, but only where it is unambiguously deliberate:
+# in a subject line, or alone on its own line in a body. Matching it anywhere
+# in a body means a commit that merely *describes* the marker — release notes,
+# documentation, this script's own history — silently suppresses the release.
+skip_marker='\[skip release\]'
+if grep -qiE "$skip_marker" <<< "$subjects" \
+    || grep -qiE "^[[:space:]]*${skip_marker}[[:space:]]*$" <<< "$bodies"; then
     echo "NO_RELEASE"
     exit 0
 fi
@@ -71,7 +76,14 @@ housekeeping_re='^(docs|chore|ci|style|test|build)(\([^)]*\))?!?:'
 
 bump="none"
 
-if grep -qE "$breaking_re" <<< "$subjects" || grep -q 'BREAKING CHANGE' <<< "$bodies"; then
+# Per the Conventional Commits spec a breaking change is declared either by "!"
+# before the colon, or by a BREAKING CHANGE *footer* — start of line, colon
+# required. Matching the phrase anywhere in a body would let a commit that
+# merely discusses breaking changes trigger a major bump.
+breaking_footer_re='^BREAKING[ -]CHANGE:'
+
+if grep -qE "$breaking_re" <<< "$subjects" \
+    || grep -qE "$breaking_footer_re" <<< "$bodies"; then
     bump="major"
 elif grep -qE '^feat(\([^)]*\))?:' <<< "$subjects"; then
     bump="minor"

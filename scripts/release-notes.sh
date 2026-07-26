@@ -61,7 +61,9 @@ breaking=""
 while IFS=$'\x1f' read -r -d $'\x1e' sha subject body; do
     sha="${sha//[$'\n\r']/}"
     [[ -z "$subject" ]] && continue
-    if grep -qE '^[a-zA-Z]+(\([^)]*\))?!:' <<< "$subject" || grep -q 'BREAKING CHANGE' <<< "$body"; then
+    # Line-anchored footer, matching the spec — see next-version.sh.
+    if grep -qE '^[a-zA-Z]+(\([^)]*\))?!:' <<< "$subject" \
+        || grep -qE '^BREAKING[ -]CHANGE:' <<< "$body"; then
         text="$(sed -E 's/^[a-zA-Z]+(\([^)]*\))?!?: *//' <<< "$subject")"
         breaking+="- ${text} (\`${sha:0:7}\`)"$'\n'
     fi
