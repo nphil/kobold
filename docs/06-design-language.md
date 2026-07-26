@@ -64,6 +64,17 @@ Design dark mode as the **primary** design, not an opt‑in theme — every real
 - **Restraint:** the Taycan lesson — the data is the design. A density ladder from full wall to Pure mode delivers "flexible but never overwhelming."
 - **Signature icon:** a light‑catching instrument motif via Icon Composer, plus alternate icons as a low‑cost delight.
 
+## Chrome rules
+
+Small conventions, applied consistently, are most of what separates a considered app from a competent one. The ones settled so far:
+
+| Surface | Scroll indicators | Why |
+|---|---|---|
+| Dashboard and other instrument views | **Hidden** (`.scrollIndicators(.hidden)`, plus `.scrollBounceBehavior(.basedOnSize)`) | An indicator is furniture competing with the instruments for a glance, and it tells a driver nothing. Content that already fits should not bounce, or the panel reads as a list. |
+| Settings, trip lists, DTC lists, theme picker | **Standard** | Here "how much is left" is real information, and the screen is read at rest rather than glanced at in motion. |
+
+The rule generalises: **chrome earns its place by carrying information.** On a surface being glanced at, anything that isn't data is subtracted.
+
 ## Empty & first‑run states
 
 Use `ContentUnavailableView` (never a blank screen) for "no adapter connected," with a headline, a friendly illustration in the app's instrument idiom, and one clear CTA. The launch screen can't animate (it's a static snapshot) — transition instantly into a real view that looks identical, then animate from there for a splash effect. First run should reach a live‑looking dashboard fast (via demo/replay data) so the app feels alive before any hardware is paired.

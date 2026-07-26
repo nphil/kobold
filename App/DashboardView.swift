@@ -30,6 +30,16 @@ struct DashboardView: View {
                 .padding(.horizontal, 18)
                 .padding(.bottom, 28)
             }
+            // The dashboard scrolls without chrome. A scroll indicator is
+            // furniture that competes with the instruments for a glance, and it
+            // says nothing a driver needs. Settings and other list-shaped
+            // screens keep the standard indicators, where "how much is left"
+            // is genuinely useful — see docs/06-design-language.md.
+            .scrollIndicators(.hidden)
+            // And it should only scroll when there is something to scroll to:
+            // bouncing content that already fits reads as a list rather than an
+            // instrument panel.
+            .scrollBounceBehavior(.basedOnSize)
         }
         .preferredColorScheme(.dark)
     }
