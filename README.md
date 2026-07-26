@@ -60,6 +60,7 @@ Orchestrated by Fable (synthesis and architecture) with a fleet of cheaper Sonne
 | 06 | [Design language](docs/06-design-language.md) | The distinctive‑yet‑native identity: the signature move, typography, motion, haptics, the anti‑patterns to avoid |
 | 07 | [Theming system](docs/07-theming-system.md) | 40 themes + match‑system, generative OKLCH palettes, semantic tokens, picker UX |
 | 08 | [Distribution & in‑car](docs/08-distribution-and-in-car.md) | Feather sideloading with your own cert, the CarPlay verdict, the phone‑mounted in‑car strategy |
+| 09 | [CI/CD & releases](docs/09-ci-cd.md) | What runs on every push, automatic semantic versioning, why signing stays off GitHub |
 | — | [reference/pid-reference.json](docs/reference/pid-reference.json) | A starter, machine‑readable PID table: SAE J1979 core + profile #1 extended PIDs |
 | — | [reference/design-tokens.md](docs/reference/design-tokens.md) | The complete semantic design‑token vocabulary a gauge‑heavy app needs |
 

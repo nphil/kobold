@@ -1,0 +1,199 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - claude/obd2-apps-research-ios-f8f3cq
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump to apply
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+      dry_run:
+        description: Compute the version but publish nothing
+        type: boolean
+        default: false
+
+# Releases must not race each other; never cancel one mid-publish.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    container: swift:6.0.3
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # A red build must never be published, so the gate is re-run here rather
+      # than assumed from CI.
+      - name: Test
+        run: swift test
+
+  publish:
+    name: Publish
+    needs: verify
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      released: ${{ steps.version.outputs.released }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history + tags for version and notes
+
+      - name: Compute next version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(scripts/next-version.sh '${{ inputs.bump || 'auto' }}')"
+          if [[ "$version" == "NO_RELEASE" ]]; then
+            echo "No release-worthy commits since the last tag."
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+          else
+            echo "Next version: $version"
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate release notes
+        if: steps.version.outputs.released == 'true'
+        run: |
+          set -euo pipefail
+          scripts/release-notes.sh "${{ steps.version.outputs.version }}" > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            if [[ "${{ steps.version.outputs.released }}" == "true" ]]; then
+              echo "### Releasing v${{ steps.version.outputs.version }}"
+              echo
+              cat RELEASE_NOTES.md
+            else
+              echo "### No release"
+              echo
+              echo "Nothing release-worthy since the last tag."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update CHANGELOG
+        if: steps.version.outputs.released == 'true' && inputs.dry_run != true
+        run: |
+          set -euo pipefail
+          touch CHANGELOG.md
+          {
+            echo "# Changelog"
+            echo
+            cat RELEASE_NOTES.md
+            echo
+            # Prior entries, minus the old top-level heading and the blank lines
+            # that would otherwise pile up at the seam.
+            sed '/^# Changelog$/d' CHANGELOG.md | sed '/./,$!d'
+          } > CHANGELOG.new
+          mv CHANGELOG.new CHANGELOG.md
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "CHANGELOG unchanged."
+          else
+            # [skip ci] stops this commit from re-triggering the release.
+            git commit -m "docs: update changelog for v${{ steps.version.outputs.version }} [skip ci]"
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
+      - name: Create GitHub release
+        if: steps.version.outputs.released == 'true' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          gh release create "v${version}" \
+            --title "v${version}" \
+            --notes-file RELEASE_NOTES.md \
+            --target "$(git rev-parse HEAD)"
+
+  detect-app:
+    name: Detect app target
+    needs: publish
+    if: needs.publish.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      has_app: ${{ steps.check.outputs.has_app }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if ls *.xcodeproj *.xcworkspace >/dev/null 2>&1; then
+            echo "has_app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_app=false" >> "$GITHUB_OUTPUT"
+            echo "No Xcode project yet — skipping the IPA build." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  ipa:
+    # Dormant until an iOS app target exists; wired now so it activates on its
+    # own once one lands.
+    #
+    # The IPA is built UNSIGNED on purpose. Distribution is via Feather using
+    # the developer's own certificate, which signs on-device — so no signing
+    # identity, provisioning profile, or p12 ever needs to live in GitHub
+    # secrets. That is both simpler and a smaller blast radius than signing here.
+    name: Build unsigned IPA
+    needs: [publish, detect-app]
+    if: needs.detect-app.outputs.has_app == 'true'
+    runs-on: macos-15
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve scheme
+        id: scheme
+        run: |
+          set -euo pipefail
+          project="$(ls -d *.xcodeproj | head -1)"
+          scheme="$(basename "$project" .xcodeproj)"
+          echo "project=$project" >> "$GITHUB_OUTPUT"
+          echo "scheme=$scheme"   >> "$GITHUB_OUTPUT"
+
+      - name: Archive (unsigned)
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project "${{ steps.scheme.outputs.project }}" \
+            -scheme "${{ steps.scheme.outputs.scheme }}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/App.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION="${{ needs.publish.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          mkdir -p Payload
+          cp -R build/App.xcarchive/Products/Applications/*.app Payload/
+          zip -qry "Kobold-${{ needs.publish.outputs.version }}-unsigned.ipa" Payload
+
+      - name: Attach to release
+        run: |
+          gh release upload "v${{ needs.publish.outputs.version }}" \
+            "Kobold-${{ needs.publish.outputs.version }}-unsigned.ipa" --clobber

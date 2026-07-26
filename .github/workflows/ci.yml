@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags-ignore: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# A newer push supersedes an in-flight run on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Test (Linux · Swift 6.0)
+    runs-on: ubuntu-latest
+    container: swift:6.0.3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trust the workspace
+        # The container runs as root while the checkout is owned by the runner
+        # user, which git refuses to operate on without this.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test 2>&1 | tee test-output.txt
+
+      - name: Reject new compiler warnings
+        # KoboldCore builds clean today. Treating warnings as errors keeps it
+        # that way rather than letting them accumulate unnoticed.
+        run: swift build -Xswiftc -warnings-as-errors
+
+      - name: Summarise
+        if: always()
+        run: |
+          {
+            echo "### Test results"
+            echo
+            if grep -qE 'Executed [0-9]+ tests' test-output.txt 2>/dev/null; then
+              echo '```'
+              grep -E 'Executed [0-9]+ tests' test-output.txt | tail -1
+              echo '```'
+            else
+              echo "No test summary captured — see the job log."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  macos:
+    name: Test (macOS · Apple toolchain)
+    # The real target is Apple platforms, so the Apple toolchain gets a vote
+    # even though KoboldCore itself is platform-agnostic.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test
+
+  scripts:
+    name: Release tooling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # version logic reads tags and history
+
+      - name: Lint shell scripts
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck scripts/*.sh
+
+      - name: Versioning is executable and produces a sane answer
+        # Guards against a release being blocked by a broken script only at the
+        # moment it is needed.
+        run: |
+          set -euo pipefail
+          version="$(scripts/next-version.sh)"
+          echo "next version: $version"
+          if [[ "$version" != "NO_RELEASE" ]] \
+             && ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::next-version.sh returned '$version'"
+            exit 1
+          fi
+          if [[ "$version" != "NO_RELEASE" ]]; then
+            scripts/release-notes.sh "$version" > /dev/null
+          fi
