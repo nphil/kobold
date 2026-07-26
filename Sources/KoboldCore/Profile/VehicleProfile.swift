@@ -29,6 +29,13 @@ public struct SignalDefinition: Codable, Sendable, Equatable {
     /// anyone should care, and that gap widens with every PID added.
     public let summary: String?
 
+    /// Which part of the car this describes, for grouping in a picker. Optional
+    /// in storage so a profile written before this field still decodes; the
+    /// accessor below supplies the residue category instead of failing.
+    public let categoryValue: SignalCategory?
+
+    public var category: SignalCategory { categoryValue ?? .other }
+
     public init(id: SignalID,
                 label: String,
                 header: String,
@@ -41,10 +48,12 @@ public struct SignalDefinition: Codable, Sendable, Equatable {
                 minimum: Double? = nil,
                 maximum: Double? = nil,
                 redline: Double? = nil,
-                summary: String? = nil) {
+                summary: String? = nil,
+                category: SignalCategory? = nil) {
         self.id = id
         self.label = label
         self.summary = summary
+        self.categoryValue = category
         self.header = header
         self.mode = mode
         self.pid = pid
@@ -55,6 +64,14 @@ public struct SignalDefinition: Codable, Sendable, Equatable {
         self.minimum = minimum
         self.maximum = maximum
         self.redline = redline
+    }
+
+    // `categoryValue` is stored optional so old profiles still decode, but the
+    // JSON key is the natural one.
+    private enum CodingKeys: String, CodingKey {
+        case id, label, summary, header, mode, pid, byteOffset, byteCount
+        case conversion, unit, minimum, maximum, redline
+        case categoryValue = "category"
     }
 
     /// Bytes the echoed PID occupies in the reply. Mode 03/07/0A echo no PID.
@@ -88,11 +105,19 @@ public struct DerivedSignal: Codable, Sendable, Equatable {
     public let label: String
     /// See `SignalDefinition.summary`.
     public let summary: String?
+    /// See `SignalDefinition.category`.
+    public let categoryValue: SignalCategory?
+    public var category: SignalCategory { categoryValue ?? .other }
     public let operation: Operation
     public let unit: Unit
     public let minimum: Double?
     public let maximum: Double?
     public let redline: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, label, summary, operation, unit, minimum, maximum, redline
+        case categoryValue = "category"
+    }
 
     public init(id: SignalID,
                 label: String,
@@ -101,10 +126,12 @@ public struct DerivedSignal: Codable, Sendable, Equatable {
                 minimum: Double? = nil,
                 maximum: Double? = nil,
                 redline: Double? = nil,
-                summary: String? = nil) {
+                summary: String? = nil,
+                category: SignalCategory? = nil) {
         self.id = id
         self.label = label
         self.summary = summary
+        self.categoryValue = category
         self.operation = operation
         self.unit = unit
         self.minimum = minimum

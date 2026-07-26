@@ -418,3 +418,75 @@ final class SignalPresentationTests: XCTestCase {
         XCTAssertNotNil(boost.summary)
     }
 }
+
+/// Grouping is what keeps the picker usable as the catalogue grows.
+final class SignalCategoryTests: XCTestCase {
+
+    func testDisplayOrderIsTotalAndStable() {
+        let ordered = SignalCategory.ordered
+        XCTAssertEqual(ordered.count, SignalCategory.allCases.count,
+                       "every category must have a place in the order")
+        XCTAssertEqual(Set(ordered.map(\.displayOrder)).count, ordered.count,
+                       "two categories sharing an order sort arbitrarily")
+        XCTAssertEqual(ordered.first, .engine, "engine is what most questions are about")
+        XCTAssertEqual(ordered.last, .other, "the residue sorts last")
+    }
+
+    func testEveryCategoryHasAName() {
+        for category in SignalCategory.allCases {
+            XCTAssertFalse(category.label.isEmpty)
+            XCTAssertFalse(category.symbolName.isEmpty)
+            XCTAssertNotEqual(category.label, category.rawValue,
+                              "\(category.rawValue) is showing its raw value")
+        }
+    }
+
+    /// A signal with no category lands in "Other", which is a visible defect in
+    /// the picker rather than a crash — so it is worth failing the build over.
+    func testEveryShippedSignalIsCategorised() throws {
+        let profile = try ProfileStore.bundled().resolve(id: "genesis-g70-2020-2.0t-awd")
+
+        for (id, definition) in profile.signals {
+            XCTAssertNotEqual(definition.category, .other,
+                              "\(id.rawValue) has no category and would land in Other")
+        }
+        for (id, definition) in profile.derivedSignals {
+            XCTAssertNotEqual(definition.category, .other,
+                              "\(id.rawValue) has no category and would land in Other")
+        }
+    }
+
+    func testCategoriesAreReadFromTheNaturalJSONKey() throws {
+        let profile = try ProfileStore.bundled().resolve(id: "genesis-g70-2020-2.0t-awd")
+
+        XCTAssertEqual(profile.definition(for: .rpm)?.category, .engine)
+        XCTAssertEqual(profile.definition(for: .map)?.category, .air)
+        XCTAssertEqual(profile.definition(for: "fuelRailPressureDirect")?.category, .fuel)
+        XCTAssertEqual(profile.definition(for: .speed)?.category, .drivetrain)
+        XCTAssertEqual(profile.definition(for: .moduleVoltage)?.category, .electrical)
+        // Derived signals are offered in the picker too and need grouping.
+        XCTAssertEqual(profile.derivedSignals[.boost]?.category, .air)
+    }
+
+    /// A profile written before the field existed must still load.
+    func testMissingCategoryDecodesAsOtherRatherThanFailing() throws {
+        let json = """
+        {"id":"legacy","label":"Legacy Signal","header":"7E0","mode":"01","pid":"0C",
+         "byteOffset":0,"byteCount":2,"conversion":{"divisor":4},"unit":"rpm"}
+        """
+        let definition = try JSONDecoder().decode(SignalDefinition.self, from: Data(json.utf8))
+        XCTAssertEqual(definition.category, .other)
+        XCTAssertNil(definition.summary)
+    }
+
+    func testCategoryRoundTripsThroughJSON() throws {
+        let original = SignalDefinition(id: "x", label: "X", header: "7E0", mode: "01", pid: "0C",
+                                        conversion: .identity, unit: .rpm,
+                                        summary: "A test signal for round tripping.",
+                                        category: .drivetrain)
+        let restored = try JSONDecoder().decode(SignalDefinition.self,
+                                                from: JSONEncoder().encode(original))
+        XCTAssertEqual(restored.category, .drivetrain)
+        XCTAssertEqual(restored.summary, original.summary)
+    }
+}

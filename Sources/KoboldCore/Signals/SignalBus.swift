@@ -17,6 +17,8 @@ public final class LiveSignal {
     /// One sentence explaining what the reading is, for surfaces with room for
     /// it. See `SignalDefinition.summary`.
     public let summary: String?
+    /// Which part of the car this describes, for grouping in a picker.
+    public let category: SignalCategory
     public let unit: Unit
     public let range: ClosedRange<Double>
     public let redline: Double?
@@ -42,10 +44,12 @@ public final class LiveSignal {
                 range: ClosedRange<Double> = 0...100,
                 redline: Double? = nil,
                 initialValue: Double = 0,
-                summary: String? = nil) {
+                summary: String? = nil,
+                category: SignalCategory = .other) {
         self.id = id
         self.label = label
         self.summary = summary
+        self.category = category
         self.unit = unit
         self.range = range
         self.redline = redline
@@ -147,7 +151,8 @@ public final class SignalBus {
                 unit: definition.unit,
                 range: (definition.minimum ?? 0)...(definition.maximum ?? 100),
                 redline: definition.redline,
-                summary: definition.summary
+                summary: definition.summary,
+                category: definition.category
             )
         }
 
@@ -158,7 +163,8 @@ public final class SignalBus {
                 unit: definition.unit,
                 range: (definition.minimum ?? 0)...(definition.maximum ?? 100),
                 redline: definition.redline,
-                summary: definition.summary
+                summary: definition.summary,
+                category: definition.category
             )
             derived[id] = definition
             for dependency in definition.dependencies {
