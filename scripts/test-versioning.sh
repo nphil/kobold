@@ -106,6 +106,20 @@ commit "feat: deferred while CI was red [skip release]"
 expect "marker still skips an automatic run" "NO_RELEASE"
 expect "explicit bump overrides the marker" "1.1.0" "minor"
 
+# ...and it must not block the *next* push either. The marker defers its own
+# commit, not everything after it. Scanning the whole range made one marker
+# suppress every automatic release until the next tag.
+commit "fix: the thing that was red"
+expect "a later commit releases despite an earlier marker" "1.1.0"
+
+# The bump reflects the whole range, not just the tip: a deferred fix still
+# produces a patch even though the commit that unblocks it is housekeeping,
+# which on its own would have produced nothing.
+fresh && git tag v1.0.0
+commit "fix: deferred [skip release]"
+commit "docs: tidy up"
+expect "deferred work counts toward the bump" "1.0.1"
+
 echo
 echo "  ${passed} passed, ${failed} failed"
 [[ "$failed" -eq 0 ]]

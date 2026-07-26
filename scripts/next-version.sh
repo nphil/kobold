@@ -63,14 +63,21 @@ fi
 # in a body means a commit that merely *describes* the marker — release notes,
 # documentation, this script's own history — silently suppresses the release.
 #
-# Only consulted for automatic runs. A caller who asked for a specific bump has
-# said so out loud, and that must outrank a marker left in an earlier commit —
-# otherwise one deferred commit would block every manual release until the next
-# tag, with no way to override it.
+# Read from the tip commit only, because the marker says "*this push* should not
+# cut a release" — not "nothing may ever be released again." Scanning the whole
+# range made a single deferred commit suppress every automatic release until
+# somebody forced one by hand, which is not a thing anyone would think they were
+# asking for. Once a later commit lands without the marker the release goes out
+# and carries the deferred work with it, still counted in the bump.
+#
+# Only consulted for automatic runs: a caller who asked for a specific bump has
+# said so out loud, and that outranks any marker.
 skip_marker='\[skip release\]'
 if [[ "$force" == "auto" ]]; then
-    if grep -qiE "$skip_marker" <<< "$subjects" \
-        || grep -qiE "^[[:space:]]*${skip_marker}[[:space:]]*$" <<< "$bodies"; then
+    head_subject="$(git log -1 --format='%s')"
+    head_body="$(git log -1 --format='%b')"
+    if grep -qiE "$skip_marker" <<< "$head_subject" \
+        || grep -qiE "^[[:space:]]*${skip_marker}[[:space:]]*$" <<< "$head_body"; then
         echo "NO_RELEASE"
         exit 0
     fi

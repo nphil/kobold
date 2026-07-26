@@ -23,10 +23,15 @@ runs on any branch that happens to exist, so a throwaway branch is never
 | Job | Runner | What it checks |
 |---|---|---|
 | `linux` | `swift:6.0.3` container | `swift build` + `swift test`, then a second build with `-warnings-as-errors` |
-| `macos` | `macos-15` | Same build/test under the Apple toolchain — the real target platform family |
+| `macos` | `macos-15` | Same build/test/warning gate under the Apple toolchain — the real target platform family |
+| `app` | `macos-15` | `xcodegen generate` + `xcodebuild` for the iOS app target |
 | `scripts` | `ubuntu-latest` | `shellcheck` on the release scripts, and a smoke test that the version logic still produces a valid answer |
 
-The warnings-as-errors step exists because `KoboldCore` builds clean today and that's worth keeping. The `scripts` job exists so a broken release script is caught on an ordinary push, not at the moment you actually need to ship.
+The warnings-as-errors step exists because `KoboldCore` builds clean today and that's worth keeping.
+
+**It runs on both platforms deliberately.** `KoboldBLE` is entirely inside `#if canImport(CoreBluetooth)`, so on Linux the gate inspects an empty module and reports success — which is how a genuine concurrency warning in the transport survived several green builds. Any target that is platform-conditional is only really checked by the runner that can compile it. The `app` job exists for the same reason one level up: SwiftUI code compiles nowhere else, and a compile error there should surface on an ordinary push rather than at release time when it blocks shipping.
+
+The `scripts` job exists so a broken release script is caught on an ordinary push, not at the moment you actually need to ship.
 
 ### `release.yml` — on push to the release branch, or manually
 
@@ -52,12 +57,15 @@ scripts/release-notes.sh 1.2.0   # preview the notes
 | `feat: …` | **minor** |
 | `fix:`, `perf:`, `refactor:`, or anything non-conventional | **patch** |
 | only `docs:`/`chore:`/`ci:`/`style:`/`test:`/`build:` | **no release** |
-| any commit containing `[skip release]` | **no release** |
+| `[skip release]` in the **tip** commit's subject, or alone on a body line | **no release** |
 
-Two deliberate choices:
+Three deliberate choices:
 
 - **Non-conventional commits count as patch-worthy.** A repo with imperfect commit history should still ship; silently never releasing is a worse failure than a slightly wrong bump.
 - **The first release starts at `0.1.0`**, not `0.0.1` — a patch bump onto nothing implies a `0.0.0` that never existed.
+- **`[skip release]` defers one push, not the branch.** It is read from the tip commit only. An earlier implementation scanned every commit back to the last tag, which meant one deferred commit silently suppressed *every* automatic release until a human forced one by hand — not something anyone would think they were asking for. Once a later commit lands without the marker, the release goes out and carries the deferred work with it, still counted in the bump: a deferred `fix:` produces a patch even when the commit that unblocks it is housekeeping that would have released nothing on its own.
+
+Both marker forms are matched only where they are unambiguously deliberate — in a subject line, or alone on their own line in a body. Matching anywhere in a body would let a commit that merely *describes* the marker (release notes, this very document) suppress a release. The same applies to `BREAKING CHANGE:`, which must be line-anchored with a colon.
 
 Housekeeping-only pushes produce no release, so documentation and CI tweaks don't churn out versions.
 

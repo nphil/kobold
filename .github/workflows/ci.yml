@@ -40,6 +40,10 @@ jobs:
       - name: Reject new compiler warnings
         # KoboldCore builds clean today. Treating warnings as errors keeps it
         # that way rather than letting them accumulate unnoticed.
+        #
+        # This gate only covers what Linux compiles. KoboldBLE is behind
+        # `#if canImport(CoreBluetooth)` and is therefore empty here — the macOS
+        # job runs the same gate for it.
         run: swift build -Xswiftc -warnings-as-errors
 
       - name: Summarise
@@ -73,6 +77,13 @@ jobs:
 
       - name: Test
         run: swift test
+
+      - name: Reject new compiler warnings
+        # The only place KoboldBLE actually gets compiled: CoreBluetooth does not
+        # exist on Linux, so the gate over there sees an empty module. A real
+        # concurrency warning in the transport went unnoticed for exactly this
+        # reason.
+        run: swift build -Xswiftc -warnings-as-errors
 
   app:
     name: Build app (iOS)
