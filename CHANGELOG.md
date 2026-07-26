@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.1
+
+### Fixes
+
+- deliver batched logs, and stop the dashboard asserting things it does not know (`710069f`)
+
+### Documentation
+
+- note that a subject mentioning the marker skips its own release (`f569be7`)
+
+**Full changelog:** `v0.5.0...v0.5.1`
+
 ## v0.5.0
 
 ### Features
