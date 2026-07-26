@@ -65,7 +65,12 @@ final class FrameRateMonitor {
         frameCount = 0
         worstInWindow = 0
 
-        Log.info(.ui, "Frame monitor started; display maximum \(maximumFramesPerSecond)Hz")
+        // Bound to a local first. `Log`'s message is an escaping @Sendable
+        // autoclosure, so reading a property inside it would capture `self` —
+        // which the compiler refuses, and which would be wrong anyway: the value
+        // wanted is the one at the call, not whenever the sink gets to it.
+        let maximum = maximumFramesPerSecond
+        Log.info(.ui, "Frame monitor started; display maximum \(maximum)Hz")
     }
 
     func stop() {
@@ -88,13 +93,15 @@ final class FrameRateMonitor {
 
         // Only worth a log line when it is actually bad, or debugging drowns in
         // healthy readings.
-        let target = Double(maximumFramesPerSecond)
-        if framesPerSecond < target * 0.8 || worstInWindow > 33 {
+        let maximum = maximumFramesPerSecond
+        let achieved = framesPerSecond
+        let worst = worstInWindow
+        let target = Double(maximum)
+        if achieved < target * 0.8 || worst > 33 {
             Log.warning(.ui, String(format: "%.0f fps (max %d), worst frame %.0f ms",
-                                    framesPerSecond, maximumFramesPerSecond, worstInWindow))
+                                    achieved, maximum, worst))
         } else {
-            Log.debug(.ui, String(format: "%.0f fps (max %d)",
-                                  framesPerSecond, maximumFramesPerSecond))
+            Log.debug(.ui, String(format: "%.0f fps (max %d)", achieved, maximum))
         }
 
         frameCount = 0
