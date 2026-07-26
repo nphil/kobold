@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.11.0",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.11.0\n\n### Features\n\n- long-press to edit, rearrange, and show cards as graphs (`7780307`)\n\n**Full changelog:** `v0.10.0...v0.11.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.11.0/Kobold-0.11.0-unsigned.ipa",
+          "size": 679345,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.10.0",
           "date": "2026-07-26",
           "localizedDescription": "## v0.10.0\n\n### Features\n\n- add the fuel-system PIDs needed to chase a long-crank fault (`8db9c47`)\n\n### Documentation\n\n- record the signal-catalogue gap and the diagnostics screen [skip ci] (`b6b203a`)\n\n**Full changelog:** `v0.9.0...v0.10.0`",
