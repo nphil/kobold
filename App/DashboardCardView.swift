@@ -33,11 +33,17 @@ struct DashboardCardView: View {
                 SparklineView(points: trace, isAlarming: signal.isOverRedline)
                     .frame(maxWidth: .infinity, minHeight: 28)
             case .gauge:
-                // A dial inside a small card is illegible; the gauge treatment
-                // belongs to the hero slot, so a card asking for one falls back
-                // to the form that still reads at this size.
-                value
-                rangeBar
+                // A real dial, not a fallback. It drops the graduations, needle
+                // and hub — those genuinely stop working at this diameter — and
+                // keeps the one thing a dial does that a number cannot: show
+                // position within a range without parsing digits.
+                CompactGaugeView(signal: signal)
+                    // Capped because the dial is square: uncapped it would grow
+                    // with the column width and tower over the number cards
+                    // beside it, and the dashboard has a fixed height to live
+                    // within. 84pt still gives a ~22pt centre value and a
+                    // ~10pt arc — comfortably legible at a glance.
+                    .frame(maxWidth: .infinity, maxHeight: 84)
             }
         }
         .padding(11)

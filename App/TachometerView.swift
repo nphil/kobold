@@ -21,8 +21,8 @@ struct TachometerView: View {
     var caption: String?
 
     /// Sweep geometry, shared with the icon.
-    private let startAngle: Double = 150
-    private let sweep: Double = 240
+    private let startAngle = KoboldDial.startAngle
+    private let sweep = KoboldDial.sweep
 
     private var redlineFraction: Double? {
         guard let redline = signal.redline else { return nil }
@@ -195,33 +195,6 @@ struct TachometerView: View {
                                    lineCap: .round)
             )
         }
-    }
-}
-
-/// An arc of the dial. Animatable so the live portion interpolates rather than
-/// jumping between polled values.
-private struct DialArc: Shape {
-    var start: Double
-    var end: Double
-
-    var animatableData: AnimatablePair<Double, Double> {
-        get { AnimatablePair(start, end) }
-        set {
-            start = newValue.first
-            end = newValue.second
-        }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let centre = CGPoint(x: rect.midX, y: rect.midY)
-        let radius = min(rect.width, rect.height) / 2
-        path.addArc(center: centre,
-                    radius: radius,
-                    startAngle: .degrees(start),
-                    endAngle: .degrees(end),
-                    clockwise: false)
-        return path
     }
 }
 
