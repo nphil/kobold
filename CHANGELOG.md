@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.0
+
+### Features
+
+- ask the car which PIDs it answers instead of guessing (`8cf606e`)
+
+**Full changelog:** `v0.7.0...v0.8.0`
+
 ## v0.7.0
 
 ### Features
