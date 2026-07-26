@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.0
+
+### Features
+
+- say why a session went quiet instead of guessing (`d6fa5ae`)
+
+**Full changelog:** `v0.6.1...v0.7.0`
+
 ## v0.6.1
 
 ### Fixes
