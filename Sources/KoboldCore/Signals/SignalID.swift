@@ -7,8 +7,13 @@ import Foundation
 /// compiled with. Well-known IDs are exposed as static members for ergonomics
 /// and compile-time safety where the app genuinely does know the signal.
 public struct SignalID: Hashable, Sendable, RawRepresentable, Codable,
-                        ExpressibleByStringLiteral, CustomStringConvertible {
+                        ExpressibleByStringLiteral, CustomStringConvertible,
+                        Identifiable {
     public let rawValue: String
+
+    /// The identifier is the name. Conformance exists so a signal can drive a
+    /// SwiftUI `sheet(item:)` or `ForEach` without a wrapper type.
+    public var id: String { rawValue }
 
     public init(rawValue: String) { self.rawValue = rawValue }
     public init(_ rawValue: String) { self.rawValue = rawValue }

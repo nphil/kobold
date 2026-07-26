@@ -20,6 +20,16 @@ public final class LiveSignal {
 
     public private(set) var value: Double
     public private(set) var updatedAt: Date?
+
+    /// Rolling history for charts.
+    ///
+    /// `@ObservationIgnored` on purpose. Appending here happens on every
+    /// sample, and if the buffer were observed, every view holding this signal
+    /// would be invalidated at sample rate even though only a chart cares — the
+    /// exact coarse-invalidation this per-signal design exists to avoid. Charts
+    /// re-read it on their own timer instead of being driven by arrivals.
+    @ObservationIgnored
+    public private(set) var history = SignalHistory()
     /// Number of samples received, for diagnostics and rate display.
     public private(set) var sampleCount: Int = 0
 
@@ -41,6 +51,7 @@ public final class LiveSignal {
         value = newValue
         updatedAt = timestamp
         sampleCount += 1
+        history.append(newValue, at: timestamp.timeIntervalSinceReferenceDate)
     }
 
     /// Whether the reading has aged past `tolerance` — used to dim a gauge
@@ -68,6 +79,9 @@ public final class LiveSignal {
         value = 0
         updatedAt = nil
         sampleCount = 0
+        // Cleared with the reading. A chart spanning two sessions would put a
+        // straight line across the gap and present it as data.
+        history.removeAll()
     }
 
     /// Position within the signal's range, clamped to 0...1 — the value a gauge

@@ -12,6 +12,8 @@ struct DashboardView: View {
     /// Signed overscroll pressure, −1…1. Positive means pulling down.
     @State private var pull: CGFloat = 0
     @State private var showDiagnostics = false
+    /// The signal whose history sheet is open, if any.
+    @State private var inspecting: SignalID?
 
     private let secondary: [SignalID] = [.speed, .boost, .coolantTemp, .oilTemp, .throttle, .moduleVoltage]
 
@@ -34,6 +36,10 @@ struct DashboardView: View {
                 if let rpm = session.bus.signal(.rpm) {
                     TachometerView(signal: rpm, caption: "RPM")
                         .frame(maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture { inspecting = .rpm }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Shows recent history")
                 }
 
                 tiles
@@ -55,6 +61,11 @@ struct DashboardView: View {
                 }
         )
         .sheet(isPresented: $showDiagnostics) { DiagnosticsView() }
+        .sheet(item: $inspecting) { id in
+            if let signal = session.bus.signal(id) {
+                SignalDetailView(signal: signal)
+            }
+        }
         .preferredColorScheme(.dark)
     }
 
@@ -235,6 +246,10 @@ struct DashboardView: View {
             ForEach(secondary, id: \.rawValue) { id in
                 if let signal = session.bus.signal(id) {
                     SignalTileView(signal: signal)
+                        .contentShape(Rectangle())
+                        .onTapGesture { inspecting = id }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Shows recent history")
                 }
             }
         }
