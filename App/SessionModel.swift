@@ -69,6 +69,21 @@ final class SessionModel {
     private let profile: ResolvedProfile
     private var runTask: Task<Void, Never>?
 
+    /// Incremented by `stop()`. Every write into this model carries the
+    /// generation it was produced for, and writes from an older one are
+    /// dropped.
+    ///
+    /// Cancelling a task does not stop work already in flight: an abandoned
+    /// adapter attempt sits inside a 12-second scan and then resumes and writes
+    /// `phase`, `lastError` and `source` over whatever session replaced it — so
+    /// a working demo would flip to "No adapter" with live data still arriving.
+    private var generation = 0
+
+    /// The transport the running session owns, so `stop()` can actually reach
+    /// it. It is created inside a detached task, and without a reference here
+    /// nothing could tear down an in-flight scan.
+    private var activeTransport: (any OBDTransport)?
+
     init() {
         // Degrades rather than refusing to launch: an unknown vehicle still
         // resolves against the standard OBD-II baseline, and a catalogue that
@@ -95,9 +110,10 @@ final class SessionModel {
         lastError = nil
         source = .demo
         let definitions = orderedDefinitions()
+        let generation = self.generation
         Log.info(.session, "Starting demo session with \(definitions.count) signals")
         runTask = Task { [weak self] in
-            await self?.runDemo(definitions: definitions)
+            await self?.runDemo(definitions: definitions, generation: generation)
         }
     }
 
@@ -106,15 +122,25 @@ final class SessionModel {
         lastError = nil
         source = .adapter("Searching…")
         let definitions = orderedDefinitions()
+        let generation = self.generation
         Log.info(.session, "Scanning for an adapter")
         runTask = Task { [weak self] in
-            await self?.runAdapter(definitions: definitions)
+            await self?.runAdapter(definitions: definitions, generation: generation)
         }
     }
 
     func stop() {
+        generation &+= 1
         runTask?.cancel()
         runTask = nil
+
+        // Cancelling the task is not enough on its own — CoreBluetooth keeps
+        // scanning until someone tells it to stop.
+        if let transport = activeTransport {
+            activeTransport = nil
+            Task { await transport.disconnect() }
+        }
+
         phase = .disconnected
         samplesPerSecond = 0
         // Whatever was on screen came from a source that no longer exists.
@@ -136,23 +162,25 @@ final class SessionModel {
     // `nonisolated` so the body runs on the generic executor rather than
     // inheriting the main actor from the caller.
 
-    private nonisolated func runDemo(definitions: [(SignalID, SignalDefinition)]) async {
+    private nonisolated func runDemo(definitions: [(SignalID, SignalDefinition)],
+                                     generation: Int) async {
         var vehicle = DemoVehicle()
         let transport = ReplayTransport(fixture: vehicle.fixture())
         let driver = ELM327Driver(transport: transport, descriptor: .generic)
 
-        await setPhase(.connecting)
+        await setPhase(.connecting, generation: generation)
         do {
             try await driver.start()
         } catch {
             Log.error(.session, "Demo session failed to start: \(error)")
-            await setPhase(.failed("Demo session failed to start"))
+            await setPhase(.failed("Demo session failed to start"), generation: generation)
             return
         }
-        await setPhase(.ready)
+        await setPhase(.ready, generation: generation)
         Log.info(.session, "Demo session ready")
 
-        await pump(driver: driver, definitions: definitions, isDemo: true) { delta in
+        await pump(driver: driver, definitions: definitions, isDemo: true,
+                   generation: generation) { delta in
             vehicle.advance(by: delta)
             await transport.update(fixture: vehicle.fixture())
         }
@@ -160,7 +188,8 @@ final class SessionModel {
         await driver.stop()
     }
 
-    private nonisolated func runAdapter(definitions: [(SignalID, SignalDefinition)]) async {
+    private nonisolated func runAdapter(definitions: [(SignalID, SignalDefinition)],
+                                        generation: Int) async {
         let registry = AdapterRegistry()
 
         // Which adapter this is cannot be known until one answers, so scanning
@@ -173,37 +202,42 @@ final class SessionModel {
         )
 
         let transport = BLETransport(descriptor: scanDescriptor)
+        // Handed to the model before connecting, so `stop()` can tear down a
+        // scan that is still in flight. Registering it afterwards would leave
+        // the 12-second scan window — the one that actually needs cancelling —
+        // completely unreachable.
+        await adopt(transport: transport, generation: generation)
 
-        await setPhase(.connecting)
+        await setPhase(.connecting, generation: generation)
         do {
             try await transport.connect()
         } catch {
             let message = Self.describe(error)
             Log.error(.transport, "Connect failed: \(message)")
-            await setPhase(.failed("No adapter"))
-            await setError(message)
+            await setPhase(.failed("No adapter"), generation: generation)
+            await setError(message, generation: generation)
             // Not `.demo`: nothing is running, and labelling it "Demo" would
             // imply data is flowing when the screen is empty.
-            await setSource(.none)
+            await setSource(.none, generation: generation)
             return
         }
 
         let name = transport.adapterName ?? "Adapter"
         Log.info(.transport, "Connected to \(name)")
-        await setSource(.adapter(name))
+        await setSource(.adapter(name), generation: generation)
 
         let driver = ELM327Driver(transport: transport,
                                   descriptor: registry.descriptor(forAdvertisedName: name),
                                   preferredProtocol: Self.rememberedProtocol(for: name))
 
-        await setPhase(.initialising)
+        await setPhase(.initialising, generation: generation)
         do {
             try await driver.start()
         } catch {
             let description = String(describing: error)
             Log.error(.elm327, "Initialisation failed on \(name): \(description)")
-            await setPhase(.failed(Self.initFailurePhase(error)))
-            await setError(Self.describeInitFailure(error, adapter: name))
+            await setPhase(.failed(Self.initFailurePhase(error)), generation: generation)
+            await setError(Self.describeInitFailure(error, adapter: name), generation: generation)
             await transport.disconnect()
             return
         }
@@ -213,7 +247,7 @@ final class SessionModel {
 
         let negotiated = resolved ?? "unknown"
         Log.info(.elm327, "Ready on \(name), protocol \(negotiated)")
-        await setPhase(.ready)
+        await setPhase(.ready, generation: generation)
 
         // Ask the car what it answers, once, instead of discovering it by
         // requesting PIDs that will never reply — every pass, forever. The
@@ -221,7 +255,8 @@ final class SessionModel {
         // negotiated the protocol a moment ago.
         let active = await Self.supportedSubset(of: definitions, using: driver)
 
-        await pump(driver: driver, definitions: active, isDemo: false, tick: nil)
+        await pump(driver: driver, definitions: active, isDemo: false,
+                   generation: generation, tick: nil)
 
         await driver.stop()
     }
@@ -235,6 +270,7 @@ final class SessionModel {
     private nonisolated func pump(driver: ELM327Driver,
                                   definitions: [(SignalID, SignalDefinition)],
                                   isDemo: Bool,
+                                  generation: Int,
                                   tick: ((Double) async -> Void)?) async {
         var lastTime = ContinuousClock.now
         var windowStart = ContinuousClock.now
@@ -281,20 +317,20 @@ final class SessionModel {
                 if consecutiveEmptyPasses >= 10, !isDemo {
                     Log.error(.elm327, "No signal answered in \(consecutiveEmptyPasses) passes — "
                               + ReadFailureSummary.describe(failures))
-                    await setPhase(.failed(Self.emptySessionPhase(failures)))
-                    await setError(Self.describeEmptySession(failures))
+                    await setPhase(.failed(Self.emptySessionPhase(failures)), generation: generation)
+                    await setError(Self.describeEmptySession(failures), generation: generation)
                     break
                 }
             } else {
                 consecutiveEmptyPasses = 0
-                await publish(batch)
+                await publish(batch, generation: generation)
             }
 
             let now = ContinuousClock.now
             if now - windowStart > .seconds(1) {
                 let elapsed = Self.seconds(now - windowStart)
                 let rate = elapsed > 0 ? Double(samplesInWindow) / elapsed : 0
-                await setRate(rate)
+                await setRate(rate, generation: generation)
                 Log.debug(.session, "Sampling at \(Int(rate)) values/s")
                 samplesInWindow = 0
                 windowStart = now
@@ -311,17 +347,44 @@ final class SessionModel {
 
     // MARK: - Main-actor mutations
 
-    private func publish(_ batch: [(SignalID, Double)]) {
+    private func publish(_ batch: [(SignalID, Double)], generation: Int) {
+        // Without this a final in-flight batch can repopulate the gauges
+        // immediately after `stop()` cleared them.
+        guard isCurrent(generation) else { return }
         let now = Date()
         for (id, value) in batch {
             bus.ingest(id: id, value: value, at: now)
         }
     }
 
-    private func setPhase(_ newPhase: ConnectionPhase) { phase = newPhase }
-    private func setError(_ message: String?) { lastError = message }
-    private func setSource(_ newSource: Source) { source = newSource }
-    private func setRate(_ rate: Double) { samplesPerSecond = rate }
+    // Each of these drops writes from a superseded run. See `generation`.
+    private func isCurrent(_ generation: Int) -> Bool { generation == self.generation }
+
+    private func setPhase(_ newPhase: ConnectionPhase, generation: Int) {
+        guard isCurrent(generation) else { return }
+        phase = newPhase
+    }
+
+    private func setError(_ message: String?, generation: Int) {
+        guard isCurrent(generation) else { return }
+        lastError = message
+    }
+
+    private func setSource(_ newSource: Source, generation: Int) {
+        guard isCurrent(generation) else { return }
+        source = newSource
+    }
+
+    private func setRate(_ rate: Double, generation: Int) {
+        guard isCurrent(generation) else { return }
+        samplesPerSecond = rate
+    }
+
+    /// Records the transport a run owns so `stop()` can tear it down.
+    private func adopt(transport: any OBDTransport, generation: Int) {
+        guard isCurrent(generation) else { return }
+        activeTransport = transport
+    }
 
     // MARK: - Helpers
 

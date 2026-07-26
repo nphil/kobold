@@ -110,6 +110,24 @@ public final class BLETransport: NSObject, OBDTransport, @unchecked Sendable {
     /// Scanning is unfiltered because the service UUID is exactly what is not
     /// known ahead of time; candidates are then filtered by advertised name.
     public func connect() async throws {
+        // Cancellation has to reach CoreBluetooth. Without this the continuation
+        // simply is not resumed when the surrounding task is cancelled: the scan
+        // keeps running for the full timeout, a second session can start its own
+        // `CBCentralManager` alongside it, and if the abandoned scan wins the
+        // race it runs `ATZ` against the very adapter the live session is
+        // initialising.
+        try await withTaskCancellationHandler {
+            try await performConnect()
+        } onCancel: {
+            queue.async {
+                guard self.pendingConnect != nil else { return }
+                self.teardown(state: .disconnected)
+                self.finishConnect(.failure(CancellationError()))
+            }
+        }
+    }
+
+    private func performConnect() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
                 // Already up: connecting again is a no-op, not a reason to scan.
@@ -152,6 +170,13 @@ public final class BLETransport: NSObject, OBDTransport, @unchecked Sendable {
         await withCheckedContinuation { continuation in
             queue.async {
                 self.teardown(state: .disconnected)
+                // Settle any connect still in flight. `teardown` cancels the
+                // scan timeout, which was the only thing that would ever have
+                // resumed it — so without this the awaiting caller hangs
+                // forever, and worse, `pendingConnect` stays non-nil and the
+                // in-progress guard in `connect()` rejects every future attempt
+                // for the life of the object. A no-op when nothing is pending.
+                self.finishConnect(.failure(BLEError.notConnected))
                 continuation.resume()
             }
         }
@@ -326,6 +351,11 @@ extension BLETransport: CBCentralManagerDelegate {
     public func centralManager(_ central: CBCentralManager,
                                didFailToConnect peripheral: CBPeripheral,
                                error: Error?) {
+        // Ignore a callback for a peripheral we already let go of: after
+        // `teardown` this transport is attached to nothing, and acting on a
+        // stale delegate call would fail whatever attempt came after it.
+        guard self.peripheral === peripheral else { return }
+
         let reason = error?.localizedDescription ?? "connection failed"
         Log.error(.transport, "Failed to connect: \(reason)")
         teardown(state: .failed(reason))
@@ -335,6 +365,8 @@ extension BLETransport: CBCentralManagerDelegate {
     public func centralManager(_ central: CBCentralManager,
                                didDisconnectPeripheral peripheral: CBPeripheral,
                                error: Error?) {
+        guard self.peripheral === peripheral else { return }
+
         // Budget adapters drop the link unprompted, and this one also hibernates
         // when the app leaves the foreground. Surface it plainly rather than
         // pretending the session is still live.
@@ -413,6 +445,10 @@ extension BLETransport: CBPeripheralDelegate {
     }
 
     private func finaliseIfDiscoveryComplete() {
+        // `peripheral == nil` means this attempt was already torn down, and a
+        // late characteristic callback must not replace the real failure with a
+        // spurious "no serial profile".
+        guard peripheral != nil, pendingConnect != nil else { return }
         guard servicesAwaitingDiscovery == 0, writeCharacteristic == nil else { return }
         if let fallback = fallbackProfile {
             // Worth an explicit note: an unhinted profile working is the whole
