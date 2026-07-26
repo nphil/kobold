@@ -27,6 +27,17 @@ public enum TransportError: Error, Equatable, Sendable {
 public protocol OBDTransport: Sendable {
     var state: TransportState { get async }
 
+    /// Establishes the link.
+    ///
+    /// **Must be idempotent.** Calling this on an already-connected transport
+    /// has to succeed immediately and leave the existing link untouched. Two
+    /// callers legitimately connect the same transport: a session connects
+    /// first when it needs the adapter's identity to choose a descriptor, and
+    /// `ELM327Driver.start()` connects because a driver cannot assume anyone
+    /// else has. A transport that restarts discovery on the second call will
+    /// tear down its own working connection — which is exactly what
+    /// `BLETransport` did, reporting "no adapter found" while connected to the
+    /// adapter it claimed not to find.
     func connect() async throws
     func disconnect() async
 

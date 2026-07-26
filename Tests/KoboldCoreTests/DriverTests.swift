@@ -317,3 +317,45 @@ final class ELM327DriverTests: XCTestCase {
         await driver.stop()
     }
 }
+
+/// `connect()` must be idempotent — see `OBDTransport.connect()`.
+///
+/// This is the contract `BLETransport` broke in the field: the session connects
+/// first to learn the adapter's advertised name (it needs it to pick a
+/// descriptor), then `ELM327Driver.start()` connects again. The BLE transport
+/// responded to the second call by starting a fresh scan, skipping the
+/// peripheral it was already attached to, timing out, and tearing down the live
+/// connection — surfacing as `noAdapterFound` while connected. The transport
+/// itself needs CoreBluetooth so it cannot be tested here, but the sequence that
+/// exposed it can, against any transport.
+final class TransportConnectIdempotencyTests: XCTestCase {
+
+    func testConnectingTwiceLeavesTheLinkUp() async throws {
+        let transport = ReplayTransport(fixture: .idlingEngine())
+
+        try await transport.connect()
+        try await transport.connect()
+
+        let state = await transport.state
+        XCTAssertEqual(state, .connected)
+    }
+
+    /// The exact production sequence: connect externally, then hand the already
+    /// connected transport to a driver, which connects again during `start()`.
+    func testDriverStartsOnAnAlreadyConnectedTransport() async throws {
+        let transport = ReplayTransport(fixture: .idlingEngine())
+        try await transport.connect()
+
+        let driver = ELM327Driver(transport: transport, descriptor: .generic)
+        try await driver.start()
+
+        let state = await transport.state
+        XCTAssertEqual(state, .connected, "start() must not tear down an existing link")
+
+        // And the link is genuinely usable afterwards, not merely labelled connected.
+        let rpm = try await driver.send("010C")
+        XCTAssertTrue(rpm.isData)
+
+        await driver.stop()
+    }
+}

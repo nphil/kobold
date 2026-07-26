@@ -78,10 +78,32 @@ final class FrameRateMonitor {
         displayLink = nil
     }
 
+    /// A gap longer than this is treated as the display link having been parked
+    /// rather than as a dropped frame.
+    ///
+    /// Backgrounding, locking the screen or taking a call stops the callbacks
+    /// entirely; when they resume, the delta is however long the app was away.
+    /// A real hang on this screen is tens of milliseconds — a device that had
+    /// genuinely blocked the main thread for a second would be reported by the
+    /// watchdog, not by a frame counter.
+    private static let discontinuityMilliseconds: Double = 1000
+
     fileprivate func frame(at timestamp: CFTimeInterval) {
+        let interval = (timestamp - lastFrame) * 1000
+
+        // Observed in a real log as "3 fps (max 120), worst frame 11496 ms",
+        // which was not a stutter anyone saw — it was the app being in the
+        // background. Reporting it buries the genuine warnings.
+        if interval > Self.discontinuityMilliseconds {
+            frameCount = 0
+            worstInWindow = 0
+            windowStart = timestamp
+            lastFrame = timestamp
+            return
+        }
+
         frameCount += 1
 
-        let interval = (timestamp - lastFrame) * 1000
         if interval > worstInWindow { worstInWindow = interval }
         lastFrame = timestamp
 

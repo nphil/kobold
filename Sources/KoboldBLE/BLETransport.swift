@@ -112,6 +112,24 @@ public final class BLETransport: NSObject, OBDTransport, @unchecked Sendable {
     public func connect() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
+                // Already up: connecting again is a no-op, not a reason to scan.
+                //
+                // Two callers legitimately connect the same transport: the
+                // session connects first because it needs the advertised name to
+                // choose a descriptor, and `ELM327Driver.start()` connects again
+                // because a driver cannot assume someone else did. Without this
+                // check the second call started a fresh scan, `didDiscover`
+                // skipped the adapter it was already attached to (`peripheral`
+                // being non-nil), the scan timed out, and `teardown` tore down a
+                // perfectly good connection — reported as `noAdapterFound` while
+                // connected to the adapter it claimed not to find.
+                if self.stateValue == .connected,
+                   self.peripheral != nil,
+                   self.writeCharacteristic != nil {
+                    continuation.resume()
+                    return
+                }
+
                 guard self.pendingConnect == nil else {
                     continuation.resume(throwing: BLEError.connectionFailed("a connection is already in progress"))
                     return
