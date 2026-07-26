@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.5.2",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.5.2\n\n### Fixes\n\n- stop tearing down the connection we just established (`c5bfa00`)\n\n**Full changelog:** `v0.5.1...v0.5.2`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.5.2/Kobold-0.5.2-unsigned.ipa",
+          "size": 593621,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.5.1",
           "date": "2026-07-26",
           "localizedDescription": "## v0.5.1\n\n### Fixes\n\n- deliver batched logs, and stop the dashboard asserting things it does not know (`710069f`)\n\n### Documentation\n\n- note that a subject mentioning the marker skips its own release (`f569be7`)\n\n**Full changelog:** `v0.5.0...v0.5.1`",
