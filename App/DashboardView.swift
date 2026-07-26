@@ -86,10 +86,15 @@ struct DashboardView: View {
     // MARK: - Layout
 
     /// Signals the vehicle has that are not already on the dashboard.
-    private var pickableSignals: [SignalID] {
+    ///
+    /// Sorted by display name, not identifier: the list is read by a person, and
+    /// `fuelRailPressureDirect` sorting under F while reading as "Fuel Rail
+    /// Pressure" is the kind of small wrongness that makes a list feel arbitrary.
+    private var pickableSignals: [LiveSignal] {
         session.bus.availableSignals
             .filter { !layout.contains($0) }
-            .sorted { $0.rawValue < $1.rawValue }
+            .compactMap { session.bus.signal($0) }
+            .sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
     }
 
     private func loadLayout() {
@@ -396,7 +401,7 @@ struct DashboardView: View {
                 } label: {
                     badge(systemName: "minus", tint: theme.danger)
                 }
-                .accessibilityLabel("Remove \(card.signal.rawValue)")
+                .accessibilityLabel("Remove \(session.bus.signal(card.signal)?.label ?? card.signal.rawValue)")
             }
             .padding(6)
         }

@@ -330,3 +330,91 @@ final class FuelSystemSignalTests: XCTestCase {
         XCTAssertEqual(try PIDDecoder.decode(data: [0x01, 0x2C], using: definition), 300, accuracy: 0.001)
     }
 }
+
+/// Names and summaries are content, and content rots quietly.
+///
+/// Every signal a user can be offered needs a label they can read and, where
+/// there is anything worth saying, a sentence explaining it. As the catalogue
+/// grows from 14 PIDs toward the ~80 the standard defines, the failure mode is
+/// a new entry shipping with a camelCase identifier where its name should be —
+/// which is invisible in review and obvious in the picker.
+// SignalBus and LiveSignal are main-actor isolated, so the whole case is —
+// matching how SignalBusTests is written rather than annotating one method,
+// which the Linux test discovery cannot call.
+@MainActor
+final class SignalPresentationTests: XCTestCase {
+
+    private func allDefinitions() throws -> [(SignalID, String, String?)] {
+        let store = try ProfileStore.bundled()
+        let profile = try store.resolve(id: "genesis-g70-2020-2.0t-awd")
+        return profile.signals.map { ($0.key, $0.value.label, $0.value.summary) }
+            + profile.derivedSignals.map { ($0.key, $0.value.label, $0.value.summary) }
+    }
+
+    func testEverySignalHasAHumanLabel() async throws {
+        for (id, label, _) in try allDefinitions() {
+            XCTAssertFalse(label.isEmpty, "\(id.rawValue) has no label")
+            XCTAssertNotEqual(label, id.rawValue,
+                              "\(id.rawValue) is showing its identifier as its name")
+            // An identifier that leaked would be camelCase with no spaces.
+            XCTAssertTrue(label.contains(" ") || label.count <= 12,
+                          "\(id.rawValue) label \"\(label)\" looks like an identifier")
+            XCTAssertTrue(label.first?.isUppercase ?? false,
+                          "\(id.rawValue) label should be title case")
+        }
+    }
+
+    /// A summary is optional by design — a name that explains itself does not
+    /// need a sentence repeating it — but one that exists has to earn its space.
+    func testSummariesThatExistAreSubstantive() async throws {
+        for (id, _, summary) in try allDefinitions() {
+            guard let summary else { continue }
+            XCTAssertGreaterThan(summary.count, 20, "\(id.rawValue) summary is too terse to help")
+            XCTAssertTrue(summary.hasSuffix("."), "\(id.rawValue) summary should be a sentence")
+        }
+    }
+
+    /// The signals whose names genuinely do not tell a driver what they are.
+    /// These are the ones the summary exists for, so their absence is a bug
+    /// rather than a judgement call.
+    func testTheJargonSignalsAreExplained() async throws {
+        let mustExplain: Set<SignalID> = [
+            "shortTrimB1", "longTrimB1", "map", "baro", "engineLoad",
+            "timingAdvance", "fuelRailPressureDirect", "fuelRailPressureRelative",
+            "boost", "maf",
+        ]
+
+        // Intersected with what this car actually has: `maf` is marked
+        // known-absent on a speed-density engine, so it is legitimately not in
+        // the resolved profile and cannot carry a summary there.
+        let definitions = try allDefinitions()
+        let present = Set(definitions.map(\.0))
+        let explained = Set(definitions.filter { $0.2 != nil }.map(\.0))
+
+        for id in mustExplain.intersection(present) where !explained.contains(id) {
+            XCTFail("\(id.rawValue) is jargon and needs a summary")
+        }
+    }
+
+    /// The summary should add to the name rather than restate it.
+    func testSummariesAreNotJustTheLabelAgain() async throws {
+        for (id, label, summary) in try allDefinitions() {
+            guard let summary else { continue }
+            XCTAssertNotEqual(summary.lowercased(), label.lowercased() + ".",
+                              "\(id.rawValue) summary just repeats its label")
+        }
+    }
+
+    func testSummarySurvivesOntoTheLiveSignal() async throws {
+        let profile = try ProfileStore.bundled().resolve(id: "genesis-g70-2020-2.0t-awd")
+        let bus = SignalBus(profile: profile)
+
+        let rail = try XCTUnwrap(bus.signal("fuelRailPressureDirect"))
+        XCTAssertEqual(rail.label, "Fuel Rail Pressure")
+        XCTAssertNotNil(rail.summary, "the picker reads this off the live signal")
+
+        // Derived signals are offered in the picker too and need the same care.
+        let boost = try XCTUnwrap(bus.signal(.boost))
+        XCTAssertNotNil(boost.summary)
+    }
+}

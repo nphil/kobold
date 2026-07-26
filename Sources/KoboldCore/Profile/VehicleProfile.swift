@@ -20,6 +20,15 @@ public struct SignalDefinition: Codable, Sendable, Equatable {
     public let maximum: Double?
     public let redline: Double?
 
+    /// One sentence a driver can act on, shown under the name where there is
+    /// room for it.
+    ///
+    /// The identifier is for code and the label is for a gauge that has no room
+    /// for prose; this is for the moment someone is deciding whether they want
+    /// a reading at all. "Long-Term Fuel Trim" names a thing without saying why
+    /// anyone should care, and that gap widens with every PID added.
+    public let summary: String?
+
     public init(id: SignalID,
                 label: String,
                 header: String,
@@ -31,9 +40,11 @@ public struct SignalDefinition: Codable, Sendable, Equatable {
                 unit: Unit,
                 minimum: Double? = nil,
                 maximum: Double? = nil,
-                redline: Double? = nil) {
+                redline: Double? = nil,
+                summary: String? = nil) {
         self.id = id
         self.label = label
+        self.summary = summary
         self.header = header
         self.mode = mode
         self.pid = pid
@@ -75,6 +86,8 @@ public struct DerivedSignal: Codable, Sendable, Equatable {
 
     public let id: SignalID
     public let label: String
+    /// See `SignalDefinition.summary`.
+    public let summary: String?
     public let operation: Operation
     public let unit: Unit
     public let minimum: Double?
@@ -87,9 +100,11 @@ public struct DerivedSignal: Codable, Sendable, Equatable {
                 unit: Unit,
                 minimum: Double? = nil,
                 maximum: Double? = nil,
-                redline: Double? = nil) {
+                redline: Double? = nil,
+                summary: String? = nil) {
         self.id = id
         self.label = label
+        self.summary = summary
         self.operation = operation
         self.unit = unit
         self.minimum = minimum

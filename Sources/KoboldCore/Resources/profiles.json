@@ -24,7 +24,8 @@
           },
           "unit": "degC",
           "minimum": -40,
-          "maximum": 215
+          "maximum": 215,
+          "summary": "Outside air temperature, measured at the front of the car."
         },
         {
           "id": "baro",
@@ -37,7 +38,8 @@
           "conversion": {},
           "unit": "kPa",
           "minimum": 0,
-          "maximum": 255
+          "maximum": 255,
+          "summary": "Atmospheric pressure. Falls with altitude, and is the reference boost is measured against."
         },
         {
           "id": "coolantTemp",
@@ -53,7 +55,8 @@
           "unit": "degC",
           "minimum": -40,
           "maximum": 215,
-          "redline": 110
+          "redline": 110,
+          "summary": "Engine coolant temperature. Sits in a narrow band once warmed up; a steady climb above it is worth stopping for."
         },
         {
           "id": "engineLoad",
@@ -69,7 +72,8 @@
           },
           "unit": "pct",
           "minimum": 0,
-          "maximum": 100
+          "maximum": 100,
+          "summary": "How hard the engine is working, as a percentage of what it could produce at the current speed."
         },
         {
           "id": "fuelLevel",
@@ -85,7 +89,8 @@
           },
           "unit": "pct",
           "minimum": 0,
-          "maximum": 100
+          "maximum": 100,
+          "summary": "Fuel remaining in the tank."
         },
         {
           "id": "fuelPressure",
@@ -100,7 +105,8 @@
           },
           "unit": "kPa",
           "minimum": 0,
-          "maximum": 765
+          "maximum": 765,
+          "summary": "Low-pressure fuel supply, before the high-pressure pump. Many direct-injection engines do not report it."
         },
         {
           "id": "fuelRailPressureDirect",
@@ -115,11 +121,12 @@
           },
           "unit": "kPa",
           "minimum": 0,
-          "maximum": 30000
+          "maximum": 30000,
+          "summary": "High-pressure fuel rail. On a direct-injection engine this runs far above the low-pressure side. A rail that bleeds down while parked is a common cause of long cranking after the car has sat."
         },
         {
           "id": "fuelRailPressureRelative",
-          "label": "Fuel Rail Pressure (rel. manifold)",
+          "label": "Fuel Rail Pressure (Relative)",
           "header": "7E0",
           "mode": "01",
           "pid": "22",
@@ -130,7 +137,8 @@
           },
           "unit": "kPa",
           "minimum": 0,
-          "maximum": 6000
+          "maximum": 6000,
+          "summary": "Fuel rail pressure measured against manifold vacuum rather than against the atmosphere."
         },
         {
           "id": "intakeTemp",
@@ -145,11 +153,12 @@
           },
           "unit": "degC",
           "minimum": -40,
-          "maximum": 215
+          "maximum": 215,
+          "summary": "Air temperature entering the engine, after the intercooler on a turbocharged car."
         },
         {
           "id": "longTrimB1",
-          "label": "Long Fuel Trim B1",
+          "label": "Long-Term Fuel Trim",
           "header": "7E0",
           "mode": "01",
           "pid": "07",
@@ -162,7 +171,8 @@
           },
           "unit": "pct",
           "minimum": -100,
-          "maximum": 99.2
+          "maximum": 99.2,
+          "summary": "The learned fuelling correction the ECU has settled on. Drifting well away from zero points at an air leak, a fuel delivery problem or a tiring sensor."
         },
         {
           "id": "maf",
@@ -177,11 +187,12 @@
           },
           "unit": "gps",
           "minimum": 0,
-          "maximum": 655.35
+          "maximum": 655.35,
+          "summary": "Mass of air entering the engine. Absent on speed-density engines, which work it out from manifold pressure instead."
         },
         {
           "id": "map",
-          "label": "Intake Manifold Pressure",
+          "label": "Manifold Pressure",
           "header": "7E0",
           "mode": "01",
           "pid": "0B",
@@ -190,11 +201,12 @@
           "conversion": {},
           "unit": "kPa",
           "minimum": 0,
-          "maximum": 255
+          "maximum": 255,
+          "summary": "Absolute pressure in the intake manifold. Below atmospheric under vacuum, above it under boost."
         },
         {
           "id": "moduleVoltage",
-          "label": "Module Voltage",
+          "label": "System Voltage",
           "header": "7E0",
           "mode": "01",
           "pid": "42",
@@ -205,7 +217,8 @@
           },
           "unit": "V",
           "minimum": 0,
-          "maximum": 65.535
+          "maximum": 65.535,
+          "summary": "Supply voltage at the engine computer. Around 12 V with the engine off, higher once the alternator is charging."
         },
         {
           "id": "rpm",
@@ -221,11 +234,12 @@
           "unit": "rpm",
           "minimum": 0,
           "maximum": 8000,
-          "redline": 6500
+          "redline": 6500,
+          "summary": "Engine speed in revolutions per minute."
         },
         {
           "id": "runTime",
-          "label": "Run Time",
+          "label": "Engine Run Time",
           "header": "7E0",
           "mode": "01",
           "pid": "1F",
@@ -234,11 +248,12 @@
           "conversion": {},
           "unit": "s",
           "minimum": 0,
-          "maximum": 65535
+          "maximum": 65535,
+          "summary": "Time since the engine last started."
         },
         {
           "id": "shortTrimB1",
-          "label": "Short Fuel Trim B1",
+          "label": "Short-Term Fuel Trim",
           "header": "7E0",
           "mode": "01",
           "pid": "06",
@@ -251,7 +266,8 @@
           },
           "unit": "pct",
           "minimum": -100,
-          "maximum": 99.2
+          "maximum": 99.2,
+          "summary": "The ECU's immediate fuelling correction from the oxygen sensor. Swings either side of zero constantly, which is normal."
         },
         {
           "id": "speed",
@@ -264,7 +280,8 @@
           "conversion": {},
           "unit": "kmh",
           "minimum": 0,
-          "maximum": 255
+          "maximum": 255,
+          "summary": "Road speed as the vehicle reports it."
         },
         {
           "id": "throttle",
@@ -280,7 +297,8 @@
           },
           "unit": "pct",
           "minimum": 0,
-          "maximum": 100
+          "maximum": 100,
+          "summary": "Throttle position, as a percentage of fully open."
         },
         {
           "id": "timingAdvance",
@@ -296,7 +314,8 @@
           },
           "unit": "deg",
           "minimum": -64,
-          "maximum": 63.5
+          "maximum": 63.5,
+          "summary": "Ignition timing ahead of top dead centre. The ECU retards it when it detects knock."
         }
       ],
       "derivedSignals": [],
@@ -336,7 +355,8 @@
           "unit": "degC",
           "minimum": -48,
           "maximum": 143,
-          "redline": 130
+          "redline": 130,
+          "summary": "Engine oil temperature. Warms more slowly than coolant, so it is the better sign of when the engine is genuinely ready."
         },
         {
           "id": "transFluidTemp",
@@ -352,7 +372,8 @@
           "unit": "degC",
           "minimum": -40,
           "maximum": 215,
-          "redline": 120
+          "redline": 120,
+          "summary": "Automatic transmission fluid temperature."
         }
       ],
       "derivedSignals": [
@@ -369,7 +390,8 @@
           "unit": "kPa",
           "minimum": 0,
           "maximum": 150,
-          "redline": 110
+          "redline": 110,
+          "summary": "Manifold pressure above atmospheric \u2014 what the turbocharger is adding. Worked out from manifold and barometric pressure rather than measured directly."
         }
       ],
       "knownAbsent": [

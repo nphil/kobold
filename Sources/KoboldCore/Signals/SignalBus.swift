@@ -14,6 +14,9 @@ import Observation
 public final class LiveSignal {
     public let id: SignalID
     public let label: String
+    /// One sentence explaining what the reading is, for surfaces with room for
+    /// it. See `SignalDefinition.summary`.
+    public let summary: String?
     public let unit: Unit
     public let range: ClosedRange<Double>
     public let redline: Double?
@@ -38,9 +41,11 @@ public final class LiveSignal {
                 unit: Unit,
                 range: ClosedRange<Double> = 0...100,
                 redline: Double? = nil,
-                initialValue: Double = 0) {
+                initialValue: Double = 0,
+                summary: String? = nil) {
         self.id = id
         self.label = label
+        self.summary = summary
         self.unit = unit
         self.range = range
         self.redline = redline
@@ -141,7 +146,8 @@ public final class SignalBus {
                 label: definition.label,
                 unit: definition.unit,
                 range: (definition.minimum ?? 0)...(definition.maximum ?? 100),
-                redline: definition.redline
+                redline: definition.redline,
+                summary: definition.summary
             )
         }
 
@@ -151,7 +157,8 @@ public final class SignalBus {
                 label: definition.label,
                 unit: definition.unit,
                 range: (definition.minimum ?? 0)...(definition.maximum ?? 100),
-                redline: definition.redline
+                redline: definition.redline,
+                summary: definition.summary
             )
             derived[id] = definition
             for dependency in definition.dependencies {
