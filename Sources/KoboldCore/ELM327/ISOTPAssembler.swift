@@ -160,6 +160,33 @@ public enum ISOTPAssembler {
             return (tokens[0].uppercased(), bytes)
         }
 
+        let compact = tokens.joined()
+
+        // Unspaced form. The init sequence sends `ATS0`, so the adapter runs the
+        // header straight into the payload with nothing to split on:
+        // `7E803410588`, not `7E8 03 41 05 88`.
+        //
+        // An 11-bit CAN header is three hex characters and the payload after it
+        // is always a whole number of bytes, so a line of odd length can only be
+        // header-plus-payload — there is no other way to get an odd count. That
+        // makes this unambiguous rather than a guess.
+        //
+        // This was a real failure: every reply from the reference vehicle was
+        // discarded as `malformedLine("7E803410588")` while the engine idled and
+        // the car answered every request correctly.
+        if compact.count % 2 == 1, compact.count > 3, compact.allSatisfy(\.isHexDigit) {
+            guard let bytes = Hex.bytes(from: String(compact.dropFirst(3))) else {
+                throw ISOTPError.malformedLine(line)
+            }
+            return (String(compact.prefix(3)).uppercased(), bytes)
+        }
+
+        // Even-length unspaced lines stay ambiguous — headerless `ATH0` output
+        // and a 29-bit header followed by payload are both even — and are read
+        // as headerless, which is what `ATH0` produces and what this driver
+        // never asks for since it sets `ATH1`. A 29-bit protocol with spaces off
+        // would need the negotiated protocol number to disambiguate; no
+        // supported vehicle has needed it yet.
         guard let bytes = Hex.bytes(from: line) else {
             throw ISOTPError.malformedLine(line)
         }

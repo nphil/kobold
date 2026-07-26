@@ -153,3 +153,82 @@ final class ELM327ReplyTests: XCTestCase {
         XCTAssertEqual(parse(["41 0C 0B B8", "STOPPED"]), .stopped)
     }
 }
+
+/// Frames captured verbatim from a Genesis G70 2020 2.0T over a Vgate iCar
+/// Pro 2S, protocol 6 (ISO 15765-4, 11-bit, 500 kbps), engine idling.
+///
+/// The init sequence sends `ATS0`, so the adapter runs the CAN header straight
+/// into the payload with no separator: `7E803410588`, not `7E8 03 41 05 88`.
+/// The splitter only handled the spaced form, so every one of these — all
+/// perfectly valid — was discarded as `malformedLine`, and the app reported
+/// that the car was not answering while it answered everything.
+final class UnspacedHeaderFrameTests: XCTestCase {
+
+    func testSingleFrameWithUnspacedElevenBitHeader() throws {
+        let responses = try ISOTPAssembler.assemble(lines: ["7E803410588"])
+
+        let response = try XCTUnwrap(responses.first)
+        XCTAssertEqual(response.header, "7E8")
+        // PCI 0x03 declares three payload bytes: mode 0x41, PID 0x05, value 0x88.
+        XCTAssertEqual(response.payload, [0x41, 0x05, 0x88])
+    }
+
+    func testRPMFromTheSecondECU() throws {
+        let responses = try ISOTPAssembler.assemble(lines: ["7E904410C0C08"])
+
+        let response = try XCTUnwrap(responses.first)
+        XCTAssertEqual(response.header, "7E9")
+        XCTAssertEqual(response.payload, [0x41, 0x0C, 0x0C, 0x08])
+    }
+
+    /// Two ECUs answering the same functional request must stay separate, which
+    /// is the entire reason headers are left on.
+    func testTwoECUsAreKeptApart() throws {
+        let responses = try ISOTPAssembler.assemble(lines: ["7E803410588", "7E903410D00"])
+
+        XCTAssertEqual(responses.count, 2)
+        XCTAssertEqual(responses.map(\.header), ["7E8", "7E9"])
+        XCTAssertEqual(responses[0].payload, [0x41, 0x05, 0x88])
+        XCTAssertEqual(responses[1].payload, [0x41, 0x0D, 0x00])
+    }
+
+    /// The Mode 22 oil-temperature reply arrives as an ISO-TP first frame,
+    /// captured here without its consecutive frames.
+    ///
+    /// Asserting the *incomplete* result on purpose: the header is now parsed
+    /// correctly, which is what changed, and a first frame on its own really is
+    /// incomplete. Reporting a partial payload as though it were an answer would
+    /// decode oil temperature from whatever bytes happened to arrive.
+    func testLoneFirstFrameIsReportedAsIncompleteNotMalformed() {
+        XCTAssertThrowsError(try ISOTPAssembler.assemble(lines: ["7E8102D62E0019FB73F"])) { error in
+            guard case .incompleteMultiFrame(let expected, let received)? = error as? ISOTPError else {
+                return XCTFail("expected incompleteMultiFrame, got \(error)")
+            }
+            XCTAssertEqual(expected, 45, "0x02D declared in the first frame")
+            XCTAssertEqual(received, 6, "eight bytes less the two PCI bytes")
+        }
+    }
+
+    /// A complete multi-frame reply reassembles across unspaced headers.
+    func testMultiFrameReassemblesWithUnspacedHeaders() throws {
+        let responses = try ISOTPAssembler.assemble(lines: [
+            "7E8100A62E0019FB73F",   // first frame: 10 bytes total, 6 carried
+            "7E82111223344000000",   // consecutive #1: 7 more, padded
+        ])
+
+        let response = try XCTUnwrap(responses.first)
+        XCTAssertEqual(response.header, "7E8")
+        // Truncated to the declared length, so the CAN padding is dropped.
+        XCTAssertEqual(response.payload,
+                       [0x62, 0xE0, 0x01, 0x9F, 0xB7, 0x3F, 0x11, 0x22, 0x33, 0x44])
+    }
+
+    /// The spaced form must keep working — nothing guarantees ATS0 succeeded.
+    func testSpacedFormStillParses() throws {
+        let responses = try ISOTPAssembler.assemble(lines: ["7E8 03 41 05 88"])
+
+        let response = try XCTUnwrap(responses.first)
+        XCTAssertEqual(response.header, "7E8")
+        XCTAssertEqual(response.payload, [0x41, 0x05, 0x88])
+    }
+}
