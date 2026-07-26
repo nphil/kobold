@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.5.0",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.5.0\n\n### Features\n\n- remote logging over ntfy and a diagnostics screen (`94e77f6`)\n\n### Fixes\n\n- make [skip release] defer one push, not the whole branch (`24d5456`)\n- stop capturing CoreBluetooth objects in log autoclosures (`514f07d`)\n- hoist log arguments out of the escaping autoclosure (`0617405`)\n- run sampling off the main actor and stop the gauges springing [skip release] (`b47734f`)\n\n**Full changelog:** `v0.4.0...v0.5.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.5.0/Kobold-0.5.0-unsigned.ipa",
+          "size": 588108,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.4.0",
           "date": "2026-07-26",
           "localizedDescription": "## v0.4.0\n\n### Features\n\n- add the CoreBluetooth transport [skip release] (`e30745a`)\n\n**Full changelog:** `v0.3.1...v0.4.0`",
