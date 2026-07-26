@@ -1,0 +1,200 @@
+import XCTest
+@testable import KoboldCore
+
+final class ProfileStoreTests: XCTestCase {
+
+    private func makeSignal(_ id: SignalID, pid: String, mode: String = "01") -> SignalDefinition {
+        SignalDefinition(id: id, label: id.rawValue, header: "7E0", mode: mode, pid: pid,
+                         byteOffset: 0, byteCount: 1, conversion: .identity, unit: .none)
+    }
+
+    func testResolvesInheritedSignals() throws {
+        let store = ProfileStore(profiles: [
+            VehicleProfile(id: "base", displayName: "Base",
+                           signals: [makeSignal(.rpm, pid: "0C"), makeSignal(.speed, pid: "0D")]),
+            VehicleProfile(id: "child", displayName: "Child", inherits: "base",
+                           signals: [makeSignal(.oilTemp, pid: "E001", mode: "22")])
+        ])
+
+        let resolved = try store.resolve(id: "child")
+        XCTAssertEqual(resolved.allSignalIDs, [.rpm, .speed, .oilTemp])
+        XCTAssertEqual(resolved.definition(for: .rpm)?.pid, "0C")
+    }
+
+    /// A descendant overriding an inherited signal is the mechanism that lets a
+    /// car replace a standard PID with a manufacturer one.
+    func testDescendantOverridesInheritedSignal() throws {
+        let store = ProfileStore(profiles: [
+            VehicleProfile(id: "base", displayName: "Base",
+                           signals: [makeSignal(.oilTemp, pid: "5C")]),
+            VehicleProfile(id: "child", displayName: "Child", inherits: "base",
+                           signals: [makeSignal(.oilTemp, pid: "E001", mode: "22")])
+        ])
+
+        let resolved = try store.resolve(id: "child")
+        XCTAssertEqual(resolved.definition(for: .oilTemp)?.pid, "E001")
+        XCTAssertEqual(resolved.definition(for: .oilTemp)?.mode, "22")
+    }
+
+    /// Marking a signal absent must make it unrequestable, so the UI never shows
+    /// a gauge the car cannot feed.
+    func testKnownAbsentRemovesInheritedSignal() throws {
+        let store = ProfileStore(profiles: [
+            VehicleProfile(id: "base", displayName: "Base",
+                           signals: [makeSignal(.maf, pid: "10"), makeSignal(.rpm, pid: "0C")]),
+            VehicleProfile(id: "child", displayName: "Child", inherits: "base",
+                           knownAbsent: [KnownAbsentSignal(id: .maf, reason: "speed-density engine")])
+        ])
+
+        let resolved = try store.resolve(id: "child")
+        XCTAssertNil(resolved.definition(for: .maf))
+        XCTAssertNotNil(resolved.definition(for: .rpm))
+        XCTAssertEqual(resolved.knownAbsent[.maf], "speed-density engine")
+    }
+
+    func testMultiLevelInheritanceAppliesOldestFirst() throws {
+        let store = ProfileStore(profiles: [
+            VehicleProfile(id: "a", displayName: "A", signals: [makeSignal(.rpm, pid: "00")]),
+            VehicleProfile(id: "b", displayName: "B", inherits: "a",
+                           signals: [makeSignal(.rpm, pid: "11")]),
+            VehicleProfile(id: "c", displayName: "C", inherits: "b",
+                           signals: [makeSignal(.rpm, pid: "22")])
+        ])
+        XCTAssertEqual(try store.resolve(id: "c").definition(for: .rpm)?.pid, "22")
+    }
+
+    func testUnknownProfileThrows() {
+        let store = ProfileStore(profiles: [])
+        XCTAssertThrowsError(try store.resolve(id: "nope")) { error in
+            XCTAssertEqual(error as? ProfileError, .unknownProfile("nope"))
+        }
+    }
+
+    func testMissingParentThrows() {
+        let store = ProfileStore(profiles: [
+            VehicleProfile(id: "child", displayName: "Child", inherits: "ghost")
+        ])
+        XCTAssertThrowsError(try store.resolve(id: "child")) { error in
+            XCTAssertEqual(error as? ProfileError, .unknownProfile("ghost"))
+        }
+    }
+
+    func testInheritanceCycleIsDetected() {
+        let store = ProfileStore(profiles: [
+            VehicleProfile(id: "a", displayName: "A", inherits: "b"),
+            VehicleProfile(id: "b", displayName: "B", inherits: "a")
+        ])
+        XCTAssertThrowsError(try store.resolve(id: "a")) { error in
+            guard case ProfileError.inheritanceCycle = error else {
+                return XCTFail("expected inheritanceCycle, got \(error)")
+            }
+        }
+    }
+}
+
+final class DerivedSignalTests: XCTestCase {
+
+    private let boost = DerivedSignal(
+        id: .boost, label: "Boost",
+        operation: .difference(lhs: .map, rhs: .baro, clampLow: 0),
+        unit: .kilopascal
+    )
+
+    /// On a speed-density engine there is no boost PID; it is always manifold
+    /// pressure minus barometric pressure.
+    func testBoostUnderLoad() {
+        let value = boost.evaluate(using: [.map: 180, .baro: 101])
+        XCTAssertEqual(value, 79)
+    }
+
+    /// At idle the manifold is in vacuum, so the raw difference is negative.
+    /// Clamping keeps the gauge at zero instead of showing negative boost.
+    func testBoostClampsAtIdle() {
+        XCTAssertEqual(boost.evaluate(using: [.map: 34, .baro: 101]), 0)
+    }
+
+    func testMissingDependencyYieldsNil() {
+        XCTAssertNil(boost.evaluate(using: [.map: 180]))
+    }
+
+    func testDependenciesAreReported() {
+        XCTAssertEqual(Set(boost.dependencies), [.map, .baro])
+    }
+
+    func testScaledOperation() {
+        let kpaToPSI = DerivedSignal(id: "boostPSI", label: "Boost (psi)",
+                                     operation: .scaled(source: .boost, factor: 0.145038),
+                                     unit: .psi)
+        let value = kpaToPSI.evaluate(using: [.boost: 100])
+        XCTAssertEqual(try XCTUnwrap(value), 14.5038, accuracy: 0.0001)
+    }
+}
+
+final class BundledCatalogueTests: XCTestCase {
+
+    func testCatalogueLoadsAndResolves() throws {
+        let store = try ProfileStore.bundled()
+        XCTAssertNotNil(store.profile(id: ProfileStore.baselineID))
+
+        let baseline = try store.resolveBaseline()
+        XCTAssertNotNil(baseline.definition(for: .rpm))
+        XCTAssertNotNil(baseline.definition(for: .coolantTemp))
+    }
+
+    func testBaselineFormulasSurviveTheJSONRoundTrip() throws {
+        let baseline = try ProfileStore.bundled().resolveBaseline()
+
+        let rpm = try XCTUnwrap(baseline.definition(for: .rpm))
+        XCTAssertEqual(try PIDDecoder.decode(data: [0x0B, 0xB8], using: rpm), 750, accuracy: 0.001)
+
+        let coolant = try XCTUnwrap(baseline.definition(for: .coolantTemp))
+        XCTAssertEqual(try PIDDecoder.decode(data: [0x5A], using: coolant), 50, accuracy: 0.001)
+
+        let voltage = try XCTUnwrap(baseline.definition(for: .moduleVoltage))
+        XCTAssertEqual(try PIDDecoder.decode(data: [0x39, 0xD0], using: voltage), 14.8, accuracy: 0.001)
+    }
+
+    /// The reference vehicle is data, not code: it should resolve to the standard
+    /// signals plus its manufacturer additions, minus what it genuinely can't report.
+    func testReferenceVehicleResolvesAsData() throws {
+        let store = try ProfileStore.bundled()
+        let profile = try store.resolve(id: "genesis-g70-2020-2.0t-awd")
+
+        // Inherited baseline signals.
+        XCTAssertNotNil(profile.definition(for: .rpm))
+        XCTAssertNotNil(profile.definition(for: .coolantTemp))
+
+        // Manufacturer-extended signals, reached over Mode 22 / Mode 21.
+        let oilTemp = try XCTUnwrap(profile.definition(for: .oilTemp))
+        XCTAssertEqual(oilTemp.mode, "22")
+        XCTAssertEqual(oilTemp.pid, "E001")
+        XCTAssertEqual(try PIDDecoder.decode(data: [0x78], using: oilTemp), 42, accuracy: 0.001)
+
+        let trans = try XCTUnwrap(profile.definition(for: .transFluidTemp))
+        XCTAssertEqual(trans.header, "7E1")
+        XCTAssertEqual(trans.mode, "21")
+
+        // Boost is derived because this engine exposes no boost PID.
+        let boost = try XCTUnwrap(profile.derivedSignals[.boost])
+        XCTAssertEqual(boost.evaluate(using: [.map: 180, .baro: 101]), 79)
+
+        // MAF is marked absent on this speed-density engine, so it must not be
+        // requestable even though the baseline defines it.
+        XCTAssertNil(profile.definition(for: .maf))
+        XCTAssertNotNil(profile.knownAbsent[.maf])
+
+        // Signals with no public PID are recorded with a reason rather than
+        // silently missing.
+        XCTAssertNotNil(profile.knownAbsent["htracClutchDuty"])
+        XCTAssertNotNil(profile.knownAbsent["steeringAngle"])
+    }
+
+    func testProfileRoundTripsThroughJSON() throws {
+        let store = try ProfileStore.bundled()
+        let original = try XCTUnwrap(store.profile(id: "genesis-g70-2020-2.0t-awd"))
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(VehicleProfile.self, from: data)
+        XCTAssertEqual(original, decoded)
+    }
+}

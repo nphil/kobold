@@ -4,7 +4,28 @@ A native SwiftUI OBD‑II dashboard for iOS — built to feel like a considered 
 
 > **Working codename:** *Kobold* — the household/mine spirit that Germanic miners blamed for the ore that "spoiled" their smelt; the ore turned out to be cobalt, and the spirit's name stuck to the element. A small, helpful presence living inside the machine, reading what the engine is doing and telling you plainly. The name is a placeholder — rename freely.
 
-This repository currently contains **research and architecture**, not code. It is the founding brief for the app: a synthesis of deep research into the open‑source OBD‑II ecosystem, the ELM327/BLE adapter landscape, a first real vehicle profile, iOS 120 fps rendering, a distinctive‑yet‑native design language, a 40‑theme theming system, and the realities of sideloaded distribution. Read it before writing the first line of Swift — it is meant to *ease up the framework* so implementation starts from decisions already made and sourced.
+This repository contains the **architecture brief** (`docs/`) and the **first working slice of the app** (`Sources/`, `Tests/`). The brief is a synthesis of deep research into the open‑source OBD‑II ecosystem, the ELM327/BLE adapter landscape, a first real vehicle profile, iOS 120 fps rendering, a distinctive‑yet‑native design language, a 40‑theme theming system, and the realities of sideloaded distribution — it exists to *ease up the framework* so implementation starts from decisions already made and sourced.
+
+## Status
+
+| Layer | State |
+|---|---|
+| Transport contracts + replay transport | ✅ implemented, tested |
+| ELM327 command loop (actor, serialised, adaptive timing) | ✅ implemented, tested |
+| Response assembly, reply classification, ISO‑TP | ✅ implemented, tested |
+| PID / DTC / supported‑PID decoding | ✅ implemented, tested |
+| Vehicle profiles + inheritance + derived signals | ✅ implemented, tested |
+| Signal bus (`@Observable`, per‑signal granularity) | ✅ implemented, tested |
+| BLE transport (CoreBluetooth) | ⬜ next |
+| Persistence (GRDB), design system, gauges, themes | ⬜ not started |
+
+**103 tests, 0 failures**, no compiler warnings. `KoboldCore` is pure Foundation — no CoreBluetooth, no SwiftUI — so it builds and tests on any platform including Linux CI:
+
+```bash
+swift build && swift test
+```
+
+The whole stack runs today against `ReplayTransport`, which serves canned adapter traffic fragmented into 20‑byte chunks exactly as a real BLE peripheral would. That means the decode path, profile engine, and signal bus are all exercised end to end **with no adapter and no car** — which matters more here than usual, since the target hardware sleeps when the app backgrounds and needs the engine running to answer most PIDs.
 
 ---
 
@@ -100,14 +121,28 @@ Three hard rules make "add more later" cheap and "meaningfully themed" true:
 
 The app is **sideloaded via Feather, signed with the developer's own paid Apple Developer certificate.** This means: 1‑year provisioning profiles (annual re‑sign, not weekly), App Groups available (so widgets and Live Activities share the live snapshot), no App Store review constraints, and background BLE, local notifications, WidgetKit and Live Activities all work. CarPlay is the one thing this cannot unlock — see [docs/08](docs/08-distribution-and-in-car.md) for the full verdict and the in‑car strategy that replaces it.
 
-## Suggested build order
+## Build order
 
-1. **Transport + adapter driver + demo/replay** — get an ELM327 command loop talking over BLE, with a record/replay transport so the rest is buildable without a car.
-2. **Vehicle profile engine + SAE J1979 baseline** — decode standard PIDs on any car; load profile #1 as data.
-3. **Signal bus + GRDB persistence** — per‑signal `@Observable` objects; wide+narrow sample schema; trip logging with segment boundaries.
-4. **Design system + theming** — semantic tokens, the `ThemeStore`, a handful of themes end‑to‑end before scaling to 40.
-5. **The dashboard** — Canvas gauges, live charts, the signature move, the hybrid customization model.
-6. **In‑car surfaces** — Live Activity, StandBy layout, Guided‑Access‑friendly drive mode.
+1. ✅ **Transport + adapter driver + replay** — ELM327 command loop, with a replay transport so the rest is buildable without a car.
+2. ✅ **Vehicle profile engine + SAE J1979 baseline** — decode standard PIDs on any car; profile #1 loaded as data.
+3. ✅ **Signal bus** — per‑signal `@Observable` objects, derived signals.
+4. ⬜ **BLE transport** — CoreBluetooth implementation of `OBDTransport`, with runtime service discovery.
+5. ⬜ **GRDB persistence** — wide+narrow sample schema; trip logging with segment boundaries.
+6. ⬜ **Design system + theming** — semantic tokens, the `ThemeStore`, a few themes end‑to‑end before scaling to 40.
+7. ⬜ **The dashboard** — Canvas gauges, live charts, the signature move, the hybrid customization model.
+8. ⬜ **In‑car surfaces** — Live Activity, StandBy layout, Guided‑Access‑friendly drive mode.
+
+### Code layout
+
+```
+Sources/KoboldCore/
+├── Transport/    OBDTransport protocol · ResponseAssembler · ReplayTransport
+├── ELM327/       ELM327Driver (actor) · reply classification · ISO-TP · adaptive timing
+├── Profile/      VehicleProfile · Conversion · PIDDecoder/DTCDecoder · ProfileStore
+├── Signals/      SignalID/Unit · LiveSignal · SignalBus
+├── Adapter/      AdapterDescriptor · AdapterRegistry
+└── Resources/    profiles.json  ← the vehicle catalogue, as data
+```
 
 ---
 
