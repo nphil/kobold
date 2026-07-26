@@ -102,12 +102,21 @@ jobs:
       - name: Build
         # Building on every push means a compile error in UI code shows up here
         # rather than at release time, when it would block shipping.
+        #
+        # Warnings are errors here and only here. The app target builds in Swift
+        # 5 language mode, so concurrency mistakes that are hard errors in the
+        # package downgrade to warnings in the app — two of them ("reference to
+        # captured var ... this is an error in the Swift 6 language mode") sat
+        # unnoticed in a green build until an unrelated change turned one into a
+        # real failure. The release workflow deliberately does not do this: a
+        # warning should stop a change landing, never stop a build shipping.
         run: |
           set -o pipefail
           xcodebuild build \
             -project Kobold.xcodeproj \
             -scheme Kobold \
             -destination 'generic/platform=iOS Simulator' \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
 

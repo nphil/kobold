@@ -149,18 +149,13 @@ public actor ELM327Driver {
             }
         }
 
-        // Bound to immutable locals before logging: the message is an escaping
-        // @Sendable autoclosure and cannot capture a mutable `var`.
-        let replied = answered
-        let attempted = commands.count
-
-        guard replied > 0 else {
-            Log.error(.elm327, "Adapter answered none of \(attempted) init commands — "
+        guard answered > 0 else {
+            Log.error(.elm327, "Adapter answered none of \(commands.count) init commands — "
                       + "the serial characteristics are probably wrong")
-            throw ELM327Error.adapterSilent(commandsTried: attempted)
+            throw ELM327Error.adapterSilent(commandsTried: commands.count)
         }
 
-        Log.info(.elm327, "Init sequence: \(replied)/\(attempted) commands answered")
+        Log.info(.elm327, "Init sequence: \(answered)/\(commands.count) commands answered")
     }
 
     /// Auto-detects the bus protocol: `ATSP0`, provoke a real request, then read
@@ -254,9 +249,8 @@ public actor ELM327Driver {
             reported.removeFirst()
         }
 
-        let identifier = reported
-        negotiatedProtocol = identifier
-        Log.info(.elm327, "Protocol \(identifier) recorded for next time")
+        negotiatedProtocol = reported
+        Log.info(.elm327, "Protocol \(reported) recorded for next time")
     }
 
     // MARK: - Commands

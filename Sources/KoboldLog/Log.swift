@@ -143,32 +143,48 @@ public actor Logger {
 ///
 /// Deliberately non-async so a caller on a hot path never has to await, and
 /// never has to care which isolation domain it is in. The cost at the call site
-/// is spawning a task; the work happens on the logger's actor.
+/// is building the string and spawning a task; the rest happens on the logger's
+/// actor.
+///
+/// **The message is an ordinary `String`, evaluated by the caller.** It used to
+/// be an `@autoclosure @escaping @Sendable` closure so that a filtered entry
+/// cost nothing to format — which sounds free and was not. Deferring evaluation
+/// meant the message *captured* whatever it interpolated, so every call site
+/// inherited the rules for an escaping concurrent closure: no reading a `var`,
+/// no reading a property without `self`, nothing non-`Sendable`. In practice
+/// that meant `CBService`, `CBCharacteristic`, `NSNumber`, `any Error`, a loop
+/// counter and a handful of ordinary stored properties all became compile
+/// errors, in four separate rounds of CI, each fixed by hoisting a local that
+/// existed only to satisfy the closure.
+///
+/// The optimisation was never worth it. Nothing on the per-sample path logs at
+/// all; the most frequent call in the app runs once a second. Formatting a
+/// string that is then discarded is cheaper than the class of bug the deferral
+/// created — and if a genuinely hot logging path ever appears, reintroducing an
+/// autoclosure here is source-compatible with every existing call site.
 public enum Log {
 
-    public static func debug(_ category: LogCategory, _ message: @autoclosure @escaping @Sendable () -> String) {
+    public static func debug(_ category: LogCategory, _ message: String) {
         emit(.debug, category, message)
     }
 
-    public static func info(_ category: LogCategory, _ message: @autoclosure @escaping @Sendable () -> String) {
+    public static func info(_ category: LogCategory, _ message: String) {
         emit(.info, category, message)
     }
 
-    public static func warning(_ category: LogCategory, _ message: @autoclosure @escaping @Sendable () -> String) {
+    public static func warning(_ category: LogCategory, _ message: String) {
         emit(.warning, category, message)
     }
 
-    public static func error(_ category: LogCategory, _ message: @autoclosure @escaping @Sendable () -> String) {
+    public static func error(_ category: LogCategory, _ message: String) {
         emit(.error, category, message)
     }
 
     private static func emit(_ level: LogLevel,
                              _ category: LogCategory,
-                             _ message: @escaping @Sendable () -> String) {
-        // The message is an autoclosure so building the string is skipped
-        // entirely when the entry would be filtered out.
+                             _ message: String) {
         Task.detached(priority: .utility) {
-            await Logger.shared.log(level, category, message())
+            await Logger.shared.log(level, category, message)
         }
     }
 }

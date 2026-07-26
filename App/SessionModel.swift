@@ -258,7 +258,8 @@ final class SessionModel {
                 // A live session that stops answering entirely is a disconnect,
                 // not a slow patch — this hardware sleeps and drops the link.
                 if consecutiveEmptyPasses >= 10, !isDemo {
-                    Log.error(.transport, "Adapter stopped responding after \(consecutiveEmptyPasses) empty passes")
+                    Log.error(.transport,
+                              "Adapter stopped responding after \(consecutiveEmptyPasses) empty passes")
                     await setPhase(.failed("Adapter stopped responding"))
                     await setError("The adapter stopped responding. It may have gone to sleep — "
                                    + "unplug it and plug it back in.")
@@ -322,7 +323,10 @@ final class SessionModel {
     // wrong is cheap anyway — the driver applies it with the auto-fallback
     // prefix, so a stale value costs one short timeout, not a failure.
 
-    private static func protocolKey(for adapter: String) -> String {
+    // `nonisolated` like its callers: static members of a `@MainActor` type
+    // inherit that isolation, so without this the two accessors below cannot
+    // reach it from the off-main session body.
+    private nonisolated static func protocolKey(for adapter: String) -> String {
         "protocol.\(adapter)"
     }
 

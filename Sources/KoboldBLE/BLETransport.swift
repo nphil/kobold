@@ -299,7 +299,6 @@ extension BLETransport: CBCentralManagerDelegate {
         let advertised = advertisementData[CBAdvertisementDataLocalNameKey] as? String
         let name = advertised ?? peripheral.name
 
-        // NSNumber is not something to capture in a @Sendable autoclosure.
         let rssi = RSSI.intValue
 
         guard matchesHints(name) else {
@@ -364,13 +363,8 @@ extension BLETransport: CBPeripheralDelegate {
         // Recorded in full because supporting a new adapter starts with knowing
         // what it actually exposes, and this is the only chance to see it.
         //
-        // Flattened to Strings and Ints here rather than inside the log call: the
-        // message is an escaping @Sendable autoclosure, and CoreBluetooth's
-        // classes are not Sendable, so nothing from them may be captured — not
-        // even to read `.count` off the array.
-        let count = services.count
         let summary = services.map { $0.uuid.uuidString }.joined(separator: ", ")
-        Log.info(.transport, "Discovered \(count) services: \(summary)")
+        Log.info(.transport, "Discovered \(services.count) services: \(summary)")
         servicesAwaitingDiscovery = services.count
         for service in services {
             peripheral.discoverCharacteristics(nil, for: service)
