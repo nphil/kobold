@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.9.0",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.9.0\n\n### Features\n\n- live history and per-signal charts (`3b880da`)\n\n**Full changelog:** `v0.8.2...v0.9.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.9.0/Kobold-0.9.0-unsigned.ipa",
+          "size": 639314,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.8.2",
           "date": "2026-07-26",
           "localizedDescription": "## v0.8.2\n\n### Fixes\n\n- stop an abandoned session from sabotaging the one that replaced it (`2c97a82`)\n\n**Full changelog:** `v0.8.1...v0.8.2`",
