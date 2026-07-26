@@ -22,10 +22,13 @@ struct KoboldApp: App {
                 .environment(\.theme, theme)
                 .environment(frameRate)
                 .task {
-                    // Starts in demo mode so the dashboard is alive on first
-                    // launch with no adapter paired — the app should never open
-                    // to an empty screen and a pairing chore.
-                    session.startDemo()
+                    // Goes straight for the adapter. An earlier version opened
+                    // in demo mode so the dashboard was never empty, but a
+                    // dashboard full of invented numbers is the wrong thing to
+                    // show someone sitting in a car — it looks exactly like a
+                    // working connection. Demo mode stays available from the
+                    // source menu, chosen deliberately.
+                    session.startAdapter()
                     frameRate.start()
                 }
                 // A dashboard is looked at while driving, so the screen must not

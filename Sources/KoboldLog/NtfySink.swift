@@ -69,7 +69,17 @@ public final class NtfySink: LogSink {
     private let uploader: Uploader
 
     public init(configuration: NtfyConfiguration, session: URLSession = .shared) {
-        uploader = Uploader(configuration: configuration, session: session)
+        uploader = Uploader(configuration: configuration, session: session, override: nil)
+    }
+
+    /// Testing seam.
+    ///
+    /// Exists so a test can observe the request *and the cancellation state of
+    /// the task issuing it* without touching the network — which is the only way
+    /// to pin down the class of bug where delivery silently runs on a cancelled
+    /// task and every request fails with `NSURLErrorCancelled`.
+    init(configuration: NtfyConfiguration, transport: @escaping NtfyTransport) {
+        uploader = Uploader(configuration: configuration, session: .shared, override: transport)
     }
 
     public func write(_ entry: LogEntry) {
@@ -92,12 +102,19 @@ public final class NtfySink: LogSink {
     }
 }
 
+/// How a request actually gets issued. Substituted in tests.
+typealias NtfyTransport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+
 // MARK: - Uploader
 
 private actor Uploader {
 
     private let configuration: NtfyConfiguration
     private let session: URLSession
+    /// When set, replaces the real network call. `URLSession` stays a stored
+    /// property rather than being captured in the closure, because it is not
+    /// `Sendable` on every platform this builds for.
+    private let override: NtfyTransport?
 
     private var pending: [LogEntry] = []
     private var pendingBytes = 0
@@ -113,9 +130,15 @@ private actor Uploader {
         entries.reduce(0) { $0 + $1.formatted.utf8.count + 1 }
     }
 
-    init(configuration: NtfyConfiguration, session: URLSession) {
+    init(configuration: NtfyConfiguration, session: URLSession, override: NtfyTransport?) {
         self.configuration = configuration
         self.session = session
+        self.override = override
+    }
+
+    private func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        if let override { return try await override(request) }
+        return try await session.data(for: request)
     }
 
     func enqueue(_ entry: LogEntry) {
@@ -142,12 +165,32 @@ private actor Uploader {
         guard flushTask == nil else { return }
         flushTask = Task { [interval = configuration.flushInterval] in
             try? await Task.sleep(for: .seconds(interval))
-            await self.flush(force: false)
+            // Cancelled means someone else already flushed; don't send twice.
+            guard !Task.isCancelled else { return }
+            await self.deliverPending(force: false)
         }
     }
 
+    /// Flush requested from outside the timer.
+    ///
+    /// Safe to cancel the timer here precisely because no caller of this method
+    /// is the timer task itself.
     func flush(force: Bool) async {
         flushTask?.cancel()
+        flushTask = nil
+        await deliverPending(force: force)
+    }
+
+    /// Sends whatever is buffered.
+    ///
+    /// This must never cancel `flushTask`: on the timer path it *is* the task
+    /// this is running on, and cancelling it cancels the `URLSession` call
+    /// below. That was a real bug — every batched entry failed with
+    /// `NSURLErrorCancelled (-999)`, was re-queued, and retried forever, while
+    /// the "send test message" button kept working because it ran on a fresh
+    /// task. The symptom was a topic containing exactly one message.
+    private func deliverPending(force: Bool) async {
+        // Detached, not cancelled, so a later enqueue can schedule again.
         flushTask = nil
 
         guard !pending.isEmpty else { return }
@@ -167,12 +210,23 @@ private actor Uploader {
 
         let result = await publish(body: body, title: title, level: worst)
         if case .failure = result {
-            // Put the batch back so a transient failure does not lose it, but
-            // only up to the cap.
-            pending.insert(contentsOf: batch.suffix(pendingLimit - pending.count), at: 0)
-            pendingBytes = Self.byteCount(of: pending)
+            requeue(batch)
             scheduleFlush()
         }
+    }
+
+    /// Puts a failed batch back, newest-first, without exceeding the cap.
+    private func requeue(_ batch: [LogEntry]) {
+        // `pending` can have grown from concurrent enqueues while the request
+        // was in flight, so the remaining room may be zero or negative — and
+        // `Array.suffix` traps on a negative argument rather than returning
+        // empty. The recent entries are the ones describing whatever is going
+        // wrong, so the tail of the batch is what gets kept.
+        let room = max(0, pendingLimit - pending.count)
+        guard room > 0 else { return }
+
+        pending.insert(contentsOf: batch.suffix(room), at: 0)
+        pendingBytes = Self.byteCount(of: pending)
     }
 
     func publish(body: String, title: String, level: LogLevel) async -> Result<Void, Error> {
@@ -193,7 +247,7 @@ private actor Uploader {
         request.httpBody = Data(body.utf8)
 
         do {
-            let (_, response) = try await session.data(for: request)
+            let (_, response) = try await perform(request)
             guard let http = response as? HTTPURLResponse else { return .success(()) }
 
             switch http.statusCode {

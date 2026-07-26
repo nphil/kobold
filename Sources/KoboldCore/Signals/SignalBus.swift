@@ -50,6 +50,26 @@ public final class LiveSignal {
         return now.timeIntervalSince(updatedAt) > tolerance
     }
 
+    /// Whether any sample has ever arrived.
+    ///
+    /// Views use this to draw a dash instead of a number. `isStale` cannot cover
+    /// this case on its own: it is derived from the clock, and SwiftUI does not
+    /// re-render because time passed — so a gauge whose source disappears keeps
+    /// displaying its last value, at full opacity, indefinitely.
+    public var hasReading: Bool { updatedAt != nil }
+
+    /// Drops the reading.
+    ///
+    /// Called when a session ends or fails. A dashboard still showing 5,220 rpm
+    /// after the adapter has gone is worse than one showing nothing, because the
+    /// number is plausible, precise, and wrong — and this one is read at a
+    /// glance while driving.
+    public func reset() {
+        value = 0
+        updatedAt = nil
+        sampleCount = 0
+    }
+
     /// Position within the signal's range, clamped to 0...1 — the value a gauge
     /// actually draws with.
     public var normalised: Double {
@@ -137,6 +157,14 @@ public final class SignalBus {
     public func signal(_ id: SignalID) -> LiveSignal? { signals[id] }
 
     public var availableSignals: [SignalID] { Array(signals.keys) }
+
+    /// Drops every reading, leaving the signals themselves in place.
+    ///
+    /// The profile does not change when a session ends — only the data goes
+    /// away — so the gauges stay on screen and simply stop claiming a value.
+    public func resetReadings() {
+        for signal in signals.values { signal.reset() }
+    }
 
     /// Applies a decoded reading and recomputes anything derived from it.
     public func ingest(id: SignalID, value: Double, at timestamp: Date = Date()) {

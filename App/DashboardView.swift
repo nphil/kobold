@@ -295,10 +295,21 @@ struct SignalTileView: View {
                 // Instant, unanimated, monospaced. See TachometerView.readout:
                 // a numeric morph re-triggered at sample rate is churn, and
                 // monospaced digits already stop the layout shifting.
-                Text(signal.value, format: .number.precision(.fractionLength(decimals)))
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(valueColour)
+                //
+                // A dash rather than a number when nothing has been received:
+                // "0 km/h" and "no reading" are different claims, and only one
+                // of them is true when the adapter has gone.
+                if signal.hasReading {
+                    Text(signal.value, format: .number.precision(.fractionLength(decimals)))
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(valueColour)
+                } else {
+                    Text("—")
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(theme.textTertiary)
+                }
 
                 Text(signal.unit.symbol)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -329,7 +340,9 @@ struct SignalTileView: View {
         .animation(KoboldMotion.ui, value: isStale)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(signal.label)
-        .accessibilityValue("\(signal.value.formatted(.number.precision(.fractionLength(decimals)))) \(signal.unit.symbol)")
+        .accessibilityValue(signal.hasReading
+                            ? "\(signal.value.formatted(.number.precision(.fractionLength(decimals)))) \(signal.unit.symbol)"
+                            : "No reading")
     }
 
     private var decimals: Int {

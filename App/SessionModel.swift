@@ -31,11 +31,17 @@ enum SessionTiming {
 final class SessionModel {
 
     enum Source: Equatable {
+        /// No source at all — nothing has been started, or the last attempt
+        /// failed. Distinct from `.demo` on purpose: falling back to a "Demo"
+        /// label after a failed connection reads as though synthetic data were
+        /// flowing, when in fact nothing is.
+        case none
         case demo
         case adapter(String)
 
         var label: String {
             switch self {
+            case .none: return "Not connected"
             case .demo: return "Demo"
             case .adapter(let name): return name
             }
@@ -46,7 +52,7 @@ final class SessionModel {
 
     private(set) var bus: SignalBus
     private(set) var phase: ConnectionPhase = .disconnected
-    private(set) var source: Source = .demo
+    private(set) var source: Source = .none
     private(set) var profileName: String
 
     /// Set when a real connection attempt fails, so the UI can say why rather
@@ -111,6 +117,11 @@ final class SessionModel {
         runTask = nil
         phase = .disconnected
         samplesPerSecond = 0
+        // Whatever was on screen came from a source that no longer exists.
+        // Leaving it there means the dashboard keeps asserting a speed and an
+        // rpm that are not true, which is exactly the wrong failure mode for a
+        // screen glanced at while driving.
+        bus.resetReadings()
     }
 
     private func orderedDefinitions() -> [(SignalID, SignalDefinition)] {
@@ -171,7 +182,9 @@ final class SessionModel {
             Log.error(.transport, "Connect failed: \(message)")
             await setPhase(.failed("No adapter"))
             await setError(message)
-            await setSource(.demo)
+            // Not `.demo`: nothing is running, and labelling it "Demo" would
+            // imply data is flowing when the screen is empty.
+            await setSource(.none)
             return
         }
 
@@ -186,10 +199,10 @@ final class SessionModel {
         do {
             try await driver.start()
         } catch {
-            Log.error(.elm327, "Initialisation failed on \(name): \(error)")
-            await setPhase(.failed("Adapter did not respond"))
-            await setError("Connected to \(name) but it did not complete initialisation. "
-                           + "Check the adapter is seated and the ignition is on.")
+            let description = String(describing: error)
+            Log.error(.elm327, "Initialisation failed on \(name): \(description)")
+            await setPhase(.failed(Self.initFailurePhase(error)))
+            await setError(Self.describeInitFailure(error, adapter: name))
             await transport.disconnect()
             return
         }
@@ -290,6 +303,42 @@ final class SessionModel {
     private nonisolated static func seconds(_ duration: Duration) -> Double {
         Double(duration.components.seconds)
             + Double(duration.components.attoseconds) / 1e18
+    }
+
+    /// Turns an init failure into advice the user can act on.
+    ///
+    /// These two failures look identical from the outside — the BLE link is up
+    /// and no data arrives — but they need opposite responses, so they must not
+    /// share a message. Telling someone to check their ignition when the real
+    /// fault is the adopted GATT characteristic pair sends them to the car for
+    /// nothing.
+    private nonisolated static func describeInitFailure(_ error: Error, adapter: String) -> String {
+        switch error as? ELM327Error {
+        case .adapterSilent:
+            return "Connected to \(adapter) over Bluetooth, but it never answered a "
+                + "single command. That points at the adapter rather than the car — "
+                + "unplug it, wait a few seconds and re-seat it. If it keeps happening, "
+                + "this model exposes a serial profile Kobold picked wrongly; the "
+                + "details are in Diagnostics."
+
+        case .protocolNegotiationFailed:
+            return "\(adapter) is responding, but the car is not. Turn the ignition on "
+                + "(engine running is most reliable) and try again — most data needs a "
+                + "live ECU, not just power at the port."
+
+        default:
+            return "Connected to \(adapter) but it did not complete initialisation. "
+                + "Check the adapter is seated and the ignition is on."
+        }
+    }
+
+    /// Short form for the status pill.
+    private nonisolated static func initFailurePhase(_ error: Error) -> String {
+        switch error as? ELM327Error {
+        case .adapterSilent: return "Adapter silent"
+        case .protocolNegotiationFailed: return "Car not responding"
+        default: return "Adapter did not respond"
+        }
     }
 
     private nonisolated static func describe(_ error: Error) -> String {

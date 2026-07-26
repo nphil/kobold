@@ -55,6 +55,26 @@ public enum ELM327Reply: Equatable, Sendable {
         if case .data = self { return true }
         return false
     }
+
+    /// Short, log-safe description.
+    ///
+    /// Payload is summarised by line count rather than content: these lines can
+    /// be forwarded to a public ntfy topic, and raw bus frames are more
+    /// identifying than they look.
+    public var summary: String {
+        switch self {
+        case .ok: return "OK"
+        case .data(let lines): return "data(\(lines.count) line\(lines.count == 1 ? "" : "s"))"
+        case .noData: return "NO DATA"
+        case .searching: return "SEARCHING"
+        case .stopped: return "STOPPED"
+        case .bufferFull: return "BUFFER FULL"
+        case .unableToConnect: return "UNABLE TO CONNECT"
+        case .canError: return "CAN ERROR"
+        case .unknownCommand: return "? (unsupported)"
+        case .unrecognised(let lines): return "unrecognised(\(lines.count) line\(lines.count == 1 ? "" : "s"))"
+        }
+    }
 }
 
 public enum ELM327ReplyParser {

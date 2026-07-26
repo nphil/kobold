@@ -99,6 +99,7 @@ struct TachometerView: View {
     }
 
     private var accessibilityValue: String {
+        guard signal.hasReading else { return "No reading" }
         let value = signal.value.formatted(.number.precision(.fractionLength(0)))
         let unit = signal.unit.symbol
         let over = signal.isOverRedline ? ", above redline" : ""
@@ -134,10 +135,20 @@ struct TachometerView: View {
             // when it changes ten times a second — and the morph would be
             // re-triggered before finishing anyway. Monospaced digits already
             // hold the layout still, which was the only real problem.
-            Text(displayedValue, format: .number.precision(.fractionLength(0)))
-                .font(.system(size: side * 0.155, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
+            // A dash when nothing has been received. The needle falls to rest at
+            // the same time, so the instrument reads as "no signal" rather than
+            // as a genuine zero.
+            if signal.hasReading {
+                Text(displayedValue, format: .number.precision(.fractionLength(0)))
+                    .font(.system(size: side * 0.155, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
+            } else {
+                Text("—")
+                    .font(.system(size: side * 0.155, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(theme.textTertiary)
+            }
 
             Text(caption ?? signal.unit.symbol.uppercased())
                 .font(.system(size: side * 0.045, weight: .medium, design: .rounded))

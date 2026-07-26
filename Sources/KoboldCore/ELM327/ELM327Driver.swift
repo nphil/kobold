@@ -1,4 +1,5 @@
 import Foundation
+import KoboldLog
 
 public enum ELM327Error: Error, Equatable, Sendable {
     case notConnected
@@ -6,6 +7,15 @@ public enum ELM327Error: Error, Equatable, Sendable {
     case deviceError(command: String, reply: ELM327Reply)
     case protocolNegotiationFailed
     case malformedResponse(String)
+
+    /// The BLE link came up but the adapter never answered a single AT command.
+    ///
+    /// Distinct from `protocolNegotiationFailed` on purpose. Both used to
+    /// surface as "did not complete initialisation", which sent the user to
+    /// check their ignition when the real fault was that the wrong GATT
+    /// characteristic pair had been adopted — a completely different fix. If
+    /// the adapter is mute, nothing about the car matters yet.
+    case adapterSilent(commandsTried: Int)
 }
 
 public enum ConnectionPhase: Equatable, Sendable {
@@ -109,12 +119,39 @@ public actor ELM327Driver {
             commands = descriptor.initOverrides
         }
 
+        // Individually non-fatal, but collectively decisive: if *none* of these
+        // draw a reply, the serial link is not working and there is no point
+        // blaming the car. Previously every result was discarded with `try?`,
+        // which meant a mute adapter and an asleep ECU produced identical
+        // symptoms and identical (wrong) advice.
+        var answered = 0
         for command in commands {
-            // ATZ resets the device and answers with a banner rather than OK, and
-            // a clone may answer '?' to a setting it doesn't implement. Neither is
-            // fatal — probe behaviour instead of trusting the version string.
-            _ = try? await sendRaw(command, timeout: descriptor.resetTimeout)
+            do {
+                // ATZ resets the device and answers with a banner rather than OK,
+                // and a clone may answer '?' to a setting it doesn't implement.
+                // Neither is fatal — probe behaviour instead of trusting the
+                // version string.
+                let reply = try await sendRaw(command, timeout: descriptor.resetTimeout)
+                answered += 1
+                Log.debug(.elm327, "\(command) -> \(reply.summary)")
+            } catch {
+                let description = String(describing: error)
+                Log.warning(.elm327, "\(command) got no usable reply: \(description)")
+            }
         }
+
+        // Bound to immutable locals before logging: the message is an escaping
+        // @Sendable autoclosure and cannot capture a mutable `var`.
+        let replied = answered
+        let attempted = commands.count
+
+        guard replied > 0 else {
+            Log.error(.elm327, "Adapter answered none of \(attempted) init commands — "
+                      + "the serial characteristics are probably wrong")
+            throw ELM327Error.adapterSilent(commandsTried: attempted)
+        }
+
+        Log.info(.elm327, "Init sequence: \(replied)/\(attempted) commands answered")
     }
 
     /// Auto-detects the bus protocol: `ATSP0`, provoke a real request, then read
@@ -124,10 +161,20 @@ public actor ELM327Driver {
 
         // `0100` forces negotiation; the reply may be preceded by `SEARCHING...`,
         // which can take appreciably longer than a steady-state request.
+        //
+        // This is the first command that needs the *car* rather than just the
+        // adapter, so it is the usual place an otherwise-healthy setup fails
+        // with the ignition off. Logged either way: knowing whether the answer
+        // was NO DATA, UNABLE TO CONNECT or a timeout is the whole difference
+        // between "turn the key" and "the adapter is lying about its protocol".
         let probe = try await send("0100", timeout: descriptor.searchTimeout, retries: 2)
         guard probe.isData else {
+            Log.error(.elm327, "Protocol negotiation failed — 0100 answered \(probe.summary). "
+                      + "The adapter is responding, so this is the vehicle side: "
+                      + "ignition off, or no supported protocol.")
             throw ELM327Error.protocolNegotiationFailed
         }
+        Log.info(.elm327, "0100 answered \(probe.summary); protocol negotiated")
 
         if case .data(let lines) = try await sendRaw("ATDPN",
                                                     timeout: descriptor.initialTimeout) {

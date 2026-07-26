@@ -1,4 +1,9 @@
 import XCTest
+import Foundation
+#if canImport(FoundationNetworking)
+// URLRequest/HTTPURLResponse live here on Linux, not in Foundation.
+import FoundationNetworking
+#endif
 @testable import KoboldLog
 
 final class LogLevelTests: XCTestCase {
@@ -133,4 +138,103 @@ private struct CollectingSink: LogSink {
         try? await Task.sleep(for: .milliseconds(50))
         return await collected.all()
     }
+}
+
+// MARK: - NtfySink delivery
+
+final class NtfySinkDeliveryTests: XCTestCase {
+
+    /// The bug this pins: `flush` used to cancel `flushTask` as its first
+    /// statement, but on the timer path `flush` *runs on* that task — so it
+    /// cancelled itself, `URLSession.data(for:)` threw `NSURLErrorCancelled`,
+    /// the batch was re-queued, and the cycle repeated forever. Nothing batched
+    /// was ever delivered, while the "send test message" button kept working
+    /// because it ran on a fresh task. A real topic showed exactly one message.
+    func testTimerDrivenDeliveryDoesNotRunOnACancelledTask() async throws {
+        let recorder = Recorder()
+        let sink = NtfySink(
+            configuration: NtfyConfiguration(topic: "kobold-test",
+                                             minimumLevel: .warning,
+                                             flushInterval: 0.2),
+            transport: { request in
+                await recorder.record(cancelled: Task.isCancelled, request: request)
+                return (Data(), HTTPURLResponse(url: request.url!,
+                                                statusCode: 200,
+                                                httpVersion: nil,
+                                                headerFields: nil)!)
+            }
+        )
+
+        sink.write(LogEntry(level: .error, category: .transport, message: "boom"))
+
+        // Long enough for the 0.2s timer to fire on its own — no explicit flush.
+        try await Task.sleep(for: .milliseconds(900))
+
+        let calls = await recorder.calls()
+        XCTAssertEqual(calls.count, 1, "the timer should have delivered exactly once")
+        XCTAssertEqual(calls.first?.cancelled, false,
+                       "delivery ran on a cancelled task, so the request would fail with -999")
+    }
+
+    /// Entries below the configured level must never leave the device.
+    func testEntriesBelowMinimumLevelAreNeverTransmitted() async throws {
+        let recorder = Recorder()
+        let sink = NtfySink(
+            configuration: NtfyConfiguration(topic: "kobold-test",
+                                             minimumLevel: .warning,
+                                             flushInterval: 0.2),
+            transport: { request in
+                await recorder.record(cancelled: Task.isCancelled, request: request)
+                return (Data(), HTTPURLResponse(url: request.url!, statusCode: 200,
+                                                httpVersion: nil, headerFields: nil)!)
+            }
+        )
+
+        sink.write(LogEntry(level: .debug, category: .session, message: "noise"))
+        sink.write(LogEntry(level: .info, category: .session, message: "also noise"))
+        // `write` hands off to the uploader's actor asynchronously, so flushing
+        // immediately can outrun the enqueue.
+        try await Task.sleep(for: .milliseconds(100))
+        await sink.flush()
+
+        let calls = await recorder.calls()
+        XCTAssertTrue(calls.isEmpty, "nothing at or above .warning was logged")
+    }
+
+    /// The topic is appended to a base URL with no trailing slash, which is
+    /// exactly where `URL(string:relativeTo:)` is easy to get wrong.
+    func testTopicResolvesOntoTheServerURL() async throws {
+        let recorder = Recorder()
+        let sink = NtfySink(
+            configuration: NtfyConfiguration(topic: "kobold-abc123", flushInterval: 0.2),
+            transport: { request in
+                await recorder.record(cancelled: Task.isCancelled, request: request)
+                return (Data(), HTTPURLResponse(url: request.url!, statusCode: 200,
+                                                httpVersion: nil, headerFields: nil)!)
+            }
+        )
+
+        sink.write(LogEntry(level: .error, category: .app, message: "x"))
+        try await Task.sleep(for: .milliseconds(100))
+        await sink.flush()
+
+        let calls = await recorder.calls()
+        let request = try XCTUnwrap(calls.first?.request)
+        XCTAssertEqual(request.url?.absoluteString, "https://ntfy.sh/kobold-abc123")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Tags"), "rotating_light")
+    }
+}
+
+private actor Recorder {
+    struct Call {
+        let cancelled: Bool
+        let request: URLRequest
+    }
+
+    private var stored: [Call] = []
+    func record(cancelled: Bool, request: URLRequest) {
+        stored.append(Call(cancelled: cancelled, request: request))
+    }
+    func calls() -> [Call] { stored }
 }

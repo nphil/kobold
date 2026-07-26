@@ -20,6 +20,9 @@ let package = Package(
     targets: [
         .target(
             name: "KoboldCore",
+            // Diagnostics only. KoboldLog is pure Foundation, so this keeps
+            // KoboldCore buildable everywhere, Linux CI included.
+            dependencies: ["KoboldLog"],
             resources: [.process("Resources")]
         ),
         .target(
