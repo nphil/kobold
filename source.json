@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.14.0",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.14.0\n\n### Features\n\n- group the picker by category and make it searchable (`349b509`)\n\n**Full changelog:** `v0.13.0...v0.14.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.14.0/Kobold-0.14.0-unsigned.ipa",
+          "size": 704162,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.13.0",
           "date": "2026-07-26",
           "localizedDescription": "## v0.13.0\n\n### Features\n\n- real names and one-line explanations, not identifiers (`db58a01`)\n\n**Full changelog:** `v0.12.0...v0.13.0`",
