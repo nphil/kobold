@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.13.0",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.13.0\n\n### Features\n\n- real names and one-line explanations, not identifiers (`db58a01`)\n\n**Full changelog:** `v0.12.0...v0.13.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.13.0/Kobold-0.13.0-unsigned.ipa",
+          "size": 691865,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.12.0",
           "date": "2026-07-26",
           "localizedDescription": "## v0.12.0\n\n### Features\n\n- give gauge cards an actual gauge (`6f86952`)\n\n**Full changelog:** `v0.11.0...v0.12.0`",
