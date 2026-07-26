@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.0
+
+### Features
+
+- remember the negotiated protocol so reconnects are quick (`9f97bab`)
+
+**Full changelog:** `v0.5.3...v0.6.0`
+
 ## v0.5.3
 
 ### Fixes
