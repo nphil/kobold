@@ -167,7 +167,25 @@ public actor ELM327Driver {
         // with the ignition off. Logged either way: knowing whether the answer
         // was NO DATA, UNABLE TO CONNECT or a timeout is the whole difference
         // between "turn the key" and "the adapter is lying about its protocol".
-        let probe = try await send("0100", timeout: descriptor.searchTimeout, retries: 2)
+        let budget = descriptor.protocolSearchTimeout
+        let budgetSeconds = budget.components.seconds
+        Log.info(.elm327, "Negotiating protocol (0100, up to \(budgetSeconds)s)")
+
+        let probe: ELM327Reply
+        do {
+            probe = try await send("0100", timeout: budget, retries: 2)
+        } catch ELM327Error.timeout {
+            // A timeout here is not "the adapter is broken" — it answered every
+            // AT command to get this far. It means the protocol search ran to
+            // the end of its budget without the vehicle ever replying, which is
+            // the same conclusion as UNABLE TO CONNECT and deserves the same
+            // advice rather than a bare `timeout(command: "0100")`.
+            Log.error(.elm327, "0100 produced nothing within \(budgetSeconds)s. The adapter is "
+                      + "answering, so the vehicle side is silent: ignition off, or no "
+                      + "supported protocol.")
+            throw ELM327Error.protocolNegotiationFailed
+        }
+
         guard probe.isData else {
             Log.error(.elm327, "Protocol negotiation failed — 0100 answered \(probe.summary). "
                       + "The adapter is responding, so this is the vehicle side: "

@@ -119,7 +119,16 @@ final class FrameRateMonitor {
         let achieved = framesPerSecond
         let worst = worstInWindow
         let target = Double(maximum)
-        if achieved < target * 0.8 || worst > 33 {
+
+        // The worst-frame bar scales with the display, because a fixed 33 ms
+        // means "two dropped frames" at 60Hz and "four" at 120Hz — so on a
+        // ProMotion device it fired on essentially every window that contained
+        // any hitch at all, and a real log filled with `117 fps, worst frame
+        // 35 ms` warnings. Eight frames' worth is jank someone actually sees.
+        let budget = 1000 / max(target, 1)
+        let jankThreshold = budget * 8
+
+        if achieved < target * 0.8 || worst > jankThreshold {
             Log.warning(.ui, String(format: "%.0f fps (max %d), worst frame %.0f ms",
                                     achieved, maximum, worst))
         } else {

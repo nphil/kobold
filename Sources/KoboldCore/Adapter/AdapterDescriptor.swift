@@ -40,6 +40,18 @@ public struct AdapterDescriptor: Sendable, Equatable, Codable, Identifiable {
     /// Longer window for commands that may trigger `SEARCHING...`.
     public let searchTimeout: Duration
 
+    /// Window for the *first* request after `ATSP0`, which is a different
+    /// animal from every later one.
+    ///
+    /// With automatic protocol selection the adapter tries each protocol in
+    /// turn, and only concludes once it has exhausted them — so the first
+    /// `0100` routinely takes ten to thirty seconds, and takes *longest*
+    /// exactly when the vehicle is not answering, which is the case the timeout
+    /// most needs to survive. A five-second budget here did not merely fail
+    /// early, it denied the adapter the chance to report `UNABLE TO CONNECT`,
+    /// turning a diagnosable answer into a bare timeout.
+    public let protocolSearchTimeout: Duration
+
     /// Whether the adapter honours the expected-response-count digit (`010C1`),
     /// which removes the trailing timeout wait from every request.
     public let supportsExpectedResponseCount: Bool
@@ -66,6 +78,7 @@ public struct AdapterDescriptor: Sendable, Equatable, Codable, Identifiable {
                 initialTimeout: Duration = .milliseconds(200),
                 resetTimeout: Duration = .milliseconds(1500),
                 searchTimeout: Duration = .seconds(5),
+                protocolSearchTimeout: Duration = .seconds(25),
                 supportsExpectedResponseCount: Bool = true,
                 supportsAutoWake: Bool = false,
                 probeCommandsOnConnect: Bool = true,
@@ -81,6 +94,7 @@ public struct AdapterDescriptor: Sendable, Equatable, Codable, Identifiable {
         self.initialTimeout = initialTimeout
         self.resetTimeout = resetTimeout
         self.searchTimeout = searchTimeout
+        self.protocolSearchTimeout = protocolSearchTimeout
         self.supportsExpectedResponseCount = supportsExpectedResponseCount
         self.supportsAutoWake = supportsAutoWake
         self.probeCommandsOnConnect = probeCommandsOnConnect
