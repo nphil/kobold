@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.2
+
+### Fixes
+
+- stop tearing down the connection we just established (`c5bfa00`)
+
+**Full changelog:** `v0.5.1...v0.5.2`
+
 ## v0.5.1
 
 ### Fixes
