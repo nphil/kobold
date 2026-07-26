@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.4.0
+
+### Features
+
+- add the CoreBluetooth transport [skip release] (`e30745a`)
+
+**Full changelog:** `v0.3.1...v0.4.0`
+
 ## v0.3.1
 
 ### Fixes
