@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.6.1",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.6.1\n\n### Fixes\n\n- unbreak the iOS build, and remove the thing that keeps breaking it (`51967d0`)\n\n**Full changelog:** `v0.6.0...v0.6.1`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.6.1/Kobold-0.6.1-unsigned.ipa",
+          "size": 595087,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.5.3",
           "date": "2026-07-26",
           "localizedDescription": "## v0.5.3\n\n### Fixes\n\n- give protocol negotiation a budget it can actually finish in (`f93375a`)\n\n**Full changelog:** `v0.5.2...v0.5.3`",
