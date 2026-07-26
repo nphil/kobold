@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.8.0",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.8.0\n\n### Features\n\n- ask the car which PIDs it answers instead of guessing (`8cf606e`)\n\n**Full changelog:** `v0.7.0...v0.8.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.8.0/Kobold-0.8.0-unsigned.ipa",
+          "size": 605239,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.7.0",
           "date": "2026-07-26",
           "localizedDescription": "## v0.7.0\n\n### Features\n\n- say why a session went quiet instead of guessing (`d6fa5ae`)\n\n**Full changelog:** `v0.6.1...v0.7.0`",
