@@ -98,6 +98,24 @@ This is a hard product constraint, forced from two independent directions:
 
 Build the **ReplayTransport** early (record real adapter traffic once, replay forever) and lean on SwiftOBD2's demo mode and the ELM327‑emulator (for validation only — non‑commercial license). This lets the profile engine, signal bus, persistence, gauges, and themes all be developed and CI‑tested with zero hardware, and makes the demo/onboarding experience real rather than faked.
 
+## Diagnostics — logging out of a device you can't attach a debugger to
+
+The failure cases that matter most happen in a car, on a sideloaded build, with no Xcode in reach: an adapter that stops answering after ten minutes, a PID that returns `NO DATA` only when the engine is warm, a frame rate that drops on one specific screen. `KoboldLog` exists for that gap.
+
+**Shape.** A `Logger` actor holding a bounded ring buffer, fanning out to a list of `LogSink`s. The call site is a static `Log.warning(.elm327, "…")` whose message parameter is `@autoclosure @escaping @Sendable` — a filtered entry never pays for its own string interpolation, which matters when the tempting place to log is inside the poll loop. Categories (`transport`, `elm327`, `decode`, `session`, `ui`, `app`) map onto OSLog subsystems so Console can filter them natively.
+
+**Sinks.**
+- `ConsoleSink` — OSLog when available, `print` otherwise. Always on.
+- `NtfySink` — HTTP POST to an [ntfy](https://ntfy.sh) topic, so warnings arrive on the phone (or a laptop) while the car is still running. Off unless explicitly enabled *and* a topic has been chosen.
+
+**Three constraints the ntfy sink is built around**, all of which are properties of the public server rather than preferences:
+
+1. **The topic name is the credential.** ntfy's own documentation states it plainly: anyone who knows or guesses a topic can read every message published to it and publish their own. So the default level is `.warning` (never the debug firehose from the sampling loop), the app offers a long random topic (`kobold-` + 18 chars) rather than letting the user type `kobold`, and the settings screen says all of this in the footer *above* the toggle's fold rather than burying it. Self‑hosting is the real answer if the contents ever matter.
+2. **Roughly one request per ten seconds**, after an initial burst of ~60, then `429` and eventually a fail2ban. So the sink batches on a 15 s timer rather than posting per line, honours `Retry-After` on a `429`, and holds a hard cap (200 entries) on the pending buffer so a long backoff can't grow it without bound. When a batch overflows, the *oldest* entries go — the recent ones describe whatever is going wrong now.
+3. **Bodies over 4 KB become downloadable attachments**, which are useless to read from a notification. The sink flushes early at 3,500 bytes.
+
+There is no maintained Swift client, and there doesn't need to be one — publishing is a `POST` with `Title`, `Tags`, and `Priority` headers.
+
 ## Sources
 
 - @Observable granularity, Instruments: https://developer.apple.com/videos/play/wwdc2025/306/
@@ -110,3 +128,6 @@ Build the **ReplayTransport** early (record real adapter traffic once, replay fo
 - Core Bluetooth background processing: https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/CoreBluetooth_concepts/CoreBluetoothBackgroundProcessingForIOSApps/PerformingTasksWhileYourAppIsInTheBackground.html
 - Background BLE regressions: https://developer.apple.com/forums/thread/801973
 - Vgate background hibernation: https://forum.vgatemall.com/showthread.php?tid=47
+- ntfy publishing API and headers: https://docs.ntfy.sh/publish/
+- ntfy "the topic is essentially a password": https://docs.ntfy.sh/publish/#publish-as-json
+- ntfy public server limits: https://docs.ntfy.sh/publish/#limitations

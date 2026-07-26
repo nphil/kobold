@@ -11,6 +11,7 @@ struct DashboardView: View {
 
     /// Signed overscroll pressure, −1…1. Positive means pulling down.
     @State private var pull: CGFloat = 0
+    @State private var showDiagnostics = false
 
     private let secondary: [SignalID] = [.speed, .boost, .coolantTemp, .oilTemp, .throttle, .moduleVoltage]
 
@@ -53,18 +54,28 @@ struct DashboardView: View {
                     }
                 }
         )
+        .sheet(isPresented: $showDiagnostics) { DiagnosticsView() }
         .preferredColorScheme(.dark)
     }
 
-    /// Maps raw drag distance onto a saturating curve.
+    /// Maps raw drag distance onto glow intensity using UIKit's own rubber-band
+    /// curve: `b(x) = (x·d·c) / (d + c·x)`.
     ///
-    /// `x / (1 + |x|)` asymptotes to ±1, so pulling harder always gives a little
-    /// more glow but never runs away — the same diminishing-return feel as a
-    /// real rubber band, which is what makes the resistance legible as "there is
-    /// nothing more here" rather than as a broken scroll.
+    /// This is the same shape a scroll view uses when you drag past its end, so
+    /// the resistance feels like something the platform would do rather than
+    /// something invented here. `b/d` is already normalised to 0…1 and saturates,
+    /// so pulling harder always gives a little more and never runs away.
+    ///
+    /// UIScrollView uses c = 0.55 over the full screen height; a short decorative
+    /// travel budget wants a stiffer constant, or the glow barely registers
+    /// before the gesture ends.
     private func resistance(_ translation: CGFloat) -> CGFloat {
-        let normalised = Double(translation) / 130
-        return CGFloat(normalised / (1 + abs(normalised)))
+        let distance = abs(Double(translation))
+        let travel: Double = 110      // d — how far a full-strength pull is
+        let stiffness: Double = 0.32  // c
+        let banded = (distance * travel * stiffness) / (travel + stiffness * distance)
+        let intensity = banded / travel
+        return CGFloat(translation < 0 ? -intensity : intensity)
     }
 
     /// A soft bloom at whichever edge is being pulled away from.
@@ -74,18 +85,23 @@ struct DashboardView: View {
     /// active theme's accent so it belongs to the current look.
     private var edgeGlow: some View {
         VStack(spacing: 0) {
-            LinearGradient(colors: [theme.accent.opacity(0.5), .clear],
+            LinearGradient(colors: [theme.accent.opacity(0.55), .clear],
                            startPoint: .top, endPoint: .bottom)
-                .frame(height: 130)
+                .frame(height: 140)
                 .opacity(Double(max(0, pull)))
 
             Spacer(minLength: 0)
 
-            LinearGradient(colors: [.clear, theme.accent.opacity(0.5)],
+            LinearGradient(colors: [.clear, theme.accent.opacity(0.55)],
                            startPoint: .top, endPoint: .bottom)
-                .frame(height: 130)
+                .frame(height: 140)
                 .opacity(Double(max(0, -pull)))
         }
+        // Flattened to a single composited layer, and only its opacity is
+        // animated. A `.shadow` would re-rasterise a blurred alpha mask on every
+        // change, which is precisely the kind of per-frame cost this screen is
+        // being cleared of.
+        .drawingGroup()
         .ignoresSafeArea()
         .allowsHitTesting(false)
         // Decorative: it says nothing VoiceOver users need, and announcing it
@@ -181,6 +197,14 @@ struct DashboardView: View {
 
     private var themeButton: some View {
         Menu {
+            Button {
+                showDiagnostics = true
+            } label: {
+                Label("Diagnostics", systemImage: "stethoscope")
+            }
+
+            Divider()
+
             ForEach(KoboldTheme.all, id: \.id) { candidate in
                 Button {
                     withAnimation(KoboldMotion.ui) { themeID = candidate.id }

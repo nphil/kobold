@@ -59,11 +59,31 @@ Only after the data model is bounded does `.drawingGroup()` (Metal‑backed comp
 - Break large view bodies into real, separately‑diffable `View` structs (not computed‑property "shortcuts"); apply `.equatable()` only where the comparison is cheaper than re‑rendering (Airbnb reported ~15% fewer scroll hitches from exactly this).
 - Never push per‑frame values through `@Environment`.
 
+## Animating a value that arrives on a fixed cadence
+
+This is the lesson that actually cost frames in practice, and it is worth stating flatly:
+
+> **An animation must be able to finish before its value changes again.** A spring whose settle time exceeds the sample interval never settles — it lives permanently mid‑bounce, and every additional animating view compounds it.
+
+The first build drove the needle with `.spring(response: 0.32, dampingFraction: 0.62)` — roughly 320 ms to settle — while re‑triggering it every 50 ms. Six more gauges did the same thing at the same time. The result reads exactly as the user described it: springy and stuttery. Three rules came out of it:
+
+1. **Match the animation duration to the publish interval.** Live values get `.linear(duration: publishInterval)`, so each sample interpolates cleanly to the next and arrives exactly as the following one lands. Keep the interval a named constant (`SessionTiming.publishInterval`) that both the poll loop and the animation read, so they cannot drift apart. Springs stay for *discrete* events — a banner arriving, an alert crossing — where there is no next value queued behind them.
+2. **Don't animate text.** `.contentTransition(.numericText())` is lovely on a value that changes when the user does something, and pure churn on one that changes at sample rate — seven views each re‑running a glyph morph, permanently. Use `.monospacedDigit()` instead: it stops the layout shifting, which was the only real problem the morph was solving.
+3. **Quantise inputs that are noisier than the display.** The tachometer rounds RPM to the nearest 10 before it reaches `animatableData`. A 3 rpm jitter is invisible on a dial and indistinguishable from noise in the numerals, but it re‑triggers the whole animation just the same.
+
+### Sampling must not run on the main actor
+
+Marking the session model `@MainActor` is the obvious thing to do and quietly puts the entire poll loop — serial writes, timeouts, ISO‑TP reassembly, decoding — on the same actor that renders. It then competes with the render loop for exactly the thread whose 8.3 ms budget you are trying to protect.
+
+The shape that works: the loop is a `nonisolated func … async` so it runs off main; it accumulates a whole pass into a `[(SignalID, Double)]` batch; and it makes **one** `await` hop to a `@MainActor` publish method per pass. Every main‑actor mutator stays small and does nothing but assign. One hop per pass instead of one per PID is the difference between a handful of actor transitions per second and hundreds.
+
 ## Measuring
 
 - **Instruments 26 "SwiftUI" template** — the *Long View Body Updates* lane flags bodies that blew the deadline (orange/red); the *Cause & Effect Graph* traces "1 gesture → N view updates" cascades caused by over‑broad `@Observable` dependencies.
 - Classic **Core Animation FPS** and **Hangs** instruments for a first pass.
 - Cheap inline: `let _ = Self._printChanges()` inside a `body` logs what caused a re‑evaluation.
+- **Ship a frame counter.** "It feels slow" is not something to settle from a desk, and a sideloaded app can't be profiled on whatever device happens to be in the car. A small `CADisplayLink` monitor reporting achieved fps against `maximumFramesPerSecond` lives in the dashboard footer (amber below 80% of capability) and in Diagnostics alongside the **worst** frame interval — a single late frame is what actually reads as a stutter, and the average it hides inside will not show it. Hold the display link behind a weak proxy object, or the run loop retains the monitor forever.
+- **Ask for the frames first.** ProMotion devices cap at 60 Hz unless `CADisableMinimumFrameDurationOnPhone` is `true` in `Info.plist`. Without it, an fps counter reading a steady 60 is reporting a correctly‑met budget you never raised.
 
 ## Accessibility (custom gauges get none automatically)
 

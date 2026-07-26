@@ -68,12 +68,21 @@ Design dark mode as the **primary** design, not an opt‑in theme — every real
 
 Small conventions, applied consistently, are most of what separates a considered app from a competent one. The ones settled so far:
 
-| Surface | Scroll indicators | Why |
+| Surface | Scrolling | Why |
 |---|---|---|
-| Dashboard and other instrument views | **Hidden** (`.scrollIndicators(.hidden)`, plus `.scrollBounceBehavior(.basedOnSize)`) | An indicator is furniture competing with the instruments for a glance, and it tells a driver nothing. Content that already fits should not bounce, or the panel reads as a list. |
-| Settings, trip lists, DTC lists, theme picker | **Standard** | Here "how much is left" is real information, and the screen is read at rest rather than glanced at in motion. |
+| Dashboard and other instrument views | **None at all.** No `ScrollView`; a fixed layout with the hero gauge taking `maxHeight: .infinity`, plus an accent‑tinted edge glow on overscroll gestures. | An indicator is furniture competing with the instruments for a glance, and it tells a driver nothing. Beyond that, a rubber‑band on a panel that cannot actually move reads as stutter — especially while every gauge is animating. A dashboard is a panel, not a document: it sizes to the screen. |
+| Settings, trip lists, DTC lists, theme picker | **Standard indicators, standard bounce.** | Here "how much is left" is real information, and the screen is read at rest rather than glanced at in motion. |
 
 The rule generalises: **chrome earns its place by carrying information.** On a surface being glanced at, anything that isn't data is subtracted.
+
+### Overscroll on a fixed panel
+
+Removing the scroll view leaves a question the user will ask with their thumb: *is there more below?* Ignoring the drag entirely is the wrong answer — a screen that does nothing feels broken rather than complete. The dashboard answers it without moving: a `.simultaneousGesture(DragGesture(minimumDistance: 8))` maps drag distance to a soft accent‑tinted bloom at whichever edge is being pulled away from.
+
+Two details make it feel native rather than invented:
+
+- **UIKit's own rubber‑band curve**, `b(x) = (x·d·c) / (d + c·x)`, maps distance to intensity. It's the identical shape a scroll view uses past its end, so the resistance is something the platform would plausibly do. `b/d` is already normalised to 0…1 and saturates, so pulling harder always gives a little more and never runs away. `UIScrollView` uses `c = 0.55` over a full screen height; a short decorative travel budget wants a stiffer constant or the glow barely registers before the gesture ends.
+- **`.drawingGroup()` on the glow, animating only opacity.** A `.shadow` would re‑rasterise a blurred alpha mask every frame — exactly the per‑frame cost this screen is being cleared of. The gesture must be `simultaneous` so it never swallows taps on the menus and tiles beneath, and the glow `.allowsHitTesting(false)` + `.accessibilityHidden(true)`: it is decoration, and announcing it would interrupt the values VoiceOver users are there for.
 
 ## Empty & first‑run states
 

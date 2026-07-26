@@ -37,13 +37,40 @@ struct KoboldApp: App {
     }
 }
 
-/// Wires up log destinations at launch.
+/// Wires up log destinations, and rebuilds them when settings change.
 enum LoggingSetup {
+
     static func install() {
         Task.detached(priority: .utility) {
-            await Logger.shared.add(sink: ConsoleSink())
+            await reconfigure()
             Log.info(.app, "Kobold \(Bundle.appVersion) (\(Bundle.appBuild)) launched")
         }
+    }
+
+    /// Rebuilds the sink list from current settings.
+    ///
+    /// Remote logging is off unless explicitly switched on, and stays off if no
+    /// topic has been chosen — shipping diagnostics to a public topic should
+    /// never be something that happens by default.
+    static func reconfigure() async {
+        let defaults = UserDefaults.standard
+        let enabled = defaults.bool(forKey: "ntfyEnabled")
+        let topic = defaults.string(forKey: "ntfyTopic") ?? ""
+        // `integer(forKey:)` returns 0 for a key that was never written, and 0 is
+        // `.debug` — which would quietly ship the whole sampling firehose to a
+        // public topic for anyone who enabled the toggle without touching the
+        // picker. Absence has to mean `.warning`, not "the lowest level".
+        let level = (defaults.object(forKey: "ntfyLevel") as? Int)
+            .flatMap(LogLevel.init(rawValue:)) ?? .warning
+
+        await Logger.shared.removeAllSinks()
+        await Logger.shared.add(sink: ConsoleSink())
+
+        guard enabled, !topic.isEmpty else { return }
+        await Logger.shared.add(
+            sink: NtfySink(configuration: NtfyConfiguration(topic: topic, minimumLevel: level))
+        )
+        Log.info(.app, "Remote logging enabled")
     }
 }
 
