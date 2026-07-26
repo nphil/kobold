@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.13.0
+
+### Features
+
+- real names and one-line explanations, not identifiers (`db58a01`)
+
+**Full changelog:** `v0.12.0...v0.13.0`
+
 ## v0.12.0
 
 ### Features
