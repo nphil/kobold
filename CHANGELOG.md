@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.1
+
+### Fixes
+
+- parse CAN headers when spaces are off (`ce33afb`)
+
+**Full changelog:** `v0.8.0...v0.8.1`
+
 ## v0.8.0
 
 ### Features
