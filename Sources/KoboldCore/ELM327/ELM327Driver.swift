@@ -318,24 +318,42 @@ public actor ELM327Driver {
     }
 
     /// Walks the supported-PID bitmasks (`0100`, `0120`, …) to discover what the
-    /// vehicle actually answers, rather than probing every PID blindly.
-    public func discoverSupportedPIDs(maximumBanks: Int = 6) async throws -> Set<UInt8> {
+    /// vehicle answers, rather than probing every PID blindly.
+    ///
+    /// The bitmask is a *declaration*, not a probe: the ECU states which PIDs it
+    /// implements, so this is authoritative and does not depend on the engine
+    /// running or the car moving. That is why discovery reads it instead of
+    /// requesting each PID and watching for `NO DATA`, which would report a
+    /// PID as absent merely because the engine was off when it was asked.
+    ///
+    /// **Every responder is unioned.** A functional request reaches all modules
+    /// and each answers with its own capabilities — the reference car returns
+    /// three responses to `0100`. Reading only the first, which this used to do,
+    /// silently hid everything the transmission or any other module supports
+    /// but the engine ECU does not.
+    public func discoverSupportedPIDs(maximumBanks: Int = 7) async throws -> Set<UInt8> {
         var supported: Set<UInt8> = []
         var base: UInt8 = 0x00
 
         for _ in 0..<maximumBanks {
             let command = "01" + String(format: "%02X", base)
-            guard case .data(let lines) = try await send(command, retries: 1),
-                  let response = try ISOTPAssembler.assemble(lines: lines).first
-            else { break }
+            guard case .data(let lines) = try await send(command, retries: 1) else { break }
 
-            let data = response.data(pidByteCount: 1)
-            let pids = SupportedPIDDecoder.supportedPIDs(from: data, base: base)
-            supported.formUnion(pids)
+            let responses = try ISOTPAssembler.assemble(lines: lines)
+            guard !responses.isEmpty else { break }
 
-            // The last bit of each bank indicates whether the next bank exists.
+            var bankPIDs: Set<UInt8> = []
+            for response in responses {
+                let data = response.data(pidByteCount: 1)
+                bankPIDs.formUnion(SupportedPIDDecoder.supportedPIDs(from: data, base: base))
+            }
+
+            supported.formUnion(bankPIDs)
+
+            // The last bit of a bank declares whether the next one exists. Any
+            // module claiming it is enough to justify asking.
             let nextBase = base &+ 0x20
-            guard pids.contains(nextBase) else { break }
+            guard bankPIDs.contains(nextBase) else { break }
             base = nextBase
         }
         return supported

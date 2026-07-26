@@ -487,3 +487,45 @@ final class ReadFailureSummaryTests: XCTestCase {
         XCTAssertFalse(ReadFailureSummary.allReportedNoData(failures))
     }
 }
+
+/// Capability discovery must union every module that answers.
+///
+/// `0100` is a functional request: it reaches all modules and each replies with
+/// its own capabilities. The reference car returns three responses. Reading
+/// only the first — which this used to do — silently hid everything the
+/// transmission supports but the engine ECU does not, which is exactly the
+/// question "do I have every PID relevant to my car" is asking.
+final class SupportedPIDDiscoveryTests: XCTestCase {
+
+    func testUnionsBitmasksFromEveryRespondingECU() async throws {
+        var fixture = ReplayTransport.Fixture.idlingEngine()
+        // Engine ECU declares PID 0C (rpm); transmission declares 0D (speed).
+        // Neither declares 0x20, so the walk stops after this bank.
+        fixture.responses["0100"] = [
+            "7E8 06 41 00 00 10 00 00",   // bit for 0x0C
+            "7E9 06 41 00 00 08 00 00",   // bit for 0x0D
+        ]
+        let transport = ReplayTransport(fixture: fixture)
+        let driver = ELM327Driver(transport: transport, descriptor: .generic)
+        try await driver.start()
+
+        let supported = try await driver.discoverSupportedPIDs()
+        XCTAssertTrue(supported.contains(0x0C), "engine ECU's PID")
+        XCTAssertTrue(supported.contains(0x0D), "transmission's PID, previously discarded")
+
+        await driver.stop()
+    }
+
+    func testASingleResponderStillWorks() async throws {
+        var fixture = ReplayTransport.Fixture.idlingEngine()
+        fixture.responses["0100"] = ["7E8 06 41 00 00 10 00 00"]
+        let transport = ReplayTransport(fixture: fixture)
+        let driver = ELM327Driver(transport: transport, descriptor: .generic)
+        try await driver.start()
+
+        let supported = try await driver.discoverSupportedPIDs()
+        XCTAssertEqual(supported, [0x0C])
+
+        await driver.stop()
+    }
+}
