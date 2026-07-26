@@ -6,6 +6,28 @@
   "iconURL": "https://raw.githubusercontent.com/nphil/kobold/main/Design/kobold-icon-512.png",
   "website": "https://github.com/nphil/kobold",
   "tintColor": "#3B7DF7",
-  "apps": [],
+  "apps": [
+    {
+      "name": "Kobold",
+      "bundleIdentifier": "com.nphil.kobold",
+      "developerName": "nphil",
+      "subtitle": "A clean, native OBD-II dashboard",
+      "localizedDescription": "Kobold reads your car's live telemetry over a Bluetooth OBD-II adapter and renders it as a clean, fast instrument cluster — gauges, graphs and trip logging, built natively for iOS.\n\nVehicles and adapters are data rather than hard-coded: standard OBD-II works on any car, with manufacturer-specific sensors added per vehicle profile.",
+      "iconURL": "https://raw.githubusercontent.com/nphil/kobold/main/Design/kobold-icon-512.png",
+      "tintColor": "#3B7DF7",
+      "category": "utilities",
+      "screenshots": [],
+      "versions": [
+        {
+          "version": "0.3.0",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.3.0\n\n### Features\n\n- add the iOS app target and dashboard [skip release] (`c8eae3b`)\n\n### Fixes\n\n- correct profile fallback and import UIKit [skip release] (`f05e31a`)\n- resolve ambiguous trig overloads in the dial graduations [skip release] (`f28f86f`)\n\n**Full changelog:** `v0.2.0...v0.3.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.3.0/Kobold-0.3.0-unsigned.ipa",
+          "size": 481505,
+          "minOSVersion": "17.0"
+        }
+      ]
+    }
+  ],
   "news": []
 }
