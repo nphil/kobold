@@ -140,31 +140,33 @@ struct TachometerView: View {
     }
 
     private func drawGraduations(in context: GraphicsContext, size: CGSize) {
-        let centre = CGPoint(x: size.width / 2, y: size.height / 2)
-        let radius = min(size.width, size.height) / 2
-        let majorEvery = 4
+        // Trigonometry is done entirely in Double and only converted to CGPoint
+        // at the end. Mixing the two invites an ambiguity between the Double and
+        // CoreGraphics overloads of cos/sin, since implicit CGFloat conversion
+        // makes both viable.
+        let centreX = Double(size.width) / 2
+        let centreY = Double(size.height) / 2
+        let radius = Double(min(size.width, size.height)) / 2
+
         let steps = 20
+        let majorEvery = 4
 
         for step in 0...steps {
             let fraction = Double(step) / Double(steps)
-            let angle = Angle.degrees(startAngle + sweep * fraction)
+            let radians: Double = Angle.degrees(startAngle + sweep * fraction).radians
             let isMajor = step % majorEvery == 0
+
+            let directionX: Double = cos(radians)
+            let directionY: Double = sin(radians)
 
             let outer = radius * 0.845
             let inner = radius * (isMajor ? 0.735 : 0.780)
 
-            let start = CGPoint(
-                x: centre.x + cos(angle.radians) * inner,
-                y: centre.y + sin(angle.radians) * inner
-            )
-            let end = CGPoint(
-                x: centre.x + cos(angle.radians) * outer,
-                y: centre.y + sin(angle.radians) * outer
-            )
-
             var path = Path()
-            path.move(to: start)
-            path.addLine(to: end)
+            path.move(to: CGPoint(x: centreX + directionX * inner,
+                                  y: centreY + directionY * inner))
+            path.addLine(to: CGPoint(x: centreX + directionX * outer,
+                                     y: centreY + directionY * outer))
 
             context.stroke(
                 path,

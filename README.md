@@ -9,7 +9,10 @@ A native SwiftUI OBD‑II dashboard for iOS — built to feel like a considered 
 
 **Install via Feather** — add this source:
 `https://raw.githubusercontent.com/nphil/kobold/main/source.json`
-*(live and subscribable now; the app appears with the first release that ships an IPA — see [docs/09](docs/09-ci-cd.md))*
+
+The IPA is published **unsigned**; Feather signs it on-device with your own certificate, so no signing material ever goes near CI. See [docs/09](docs/09-ci-cd.md).
+
+> **What works today:** the app opens into a live dashboard running in **demo mode** — a simulated ECU that answers real ELM327 frames, so the whole decode path runs on device. Talking to an actual adapter needs the BLE transport, which is the next piece of work.
 
 > **Working codename:** *Kobold* — the household/mine spirit that Germanic miners blamed for the ore that "spoiled" their smelt; the ore turned out to be cobalt, and the spirit's name stuck to the element. A small, helpful presence living inside the machine, reading what the engine is doing and telling you plainly. The name is a placeholder — rename freely.
 
@@ -25,8 +28,10 @@ This repository contains the **architecture brief** (`docs/`) and the **first wo
 | PID / DTC / supported‑PID decoding | ✅ implemented, tested |
 | Vehicle profiles + inheritance + derived signals | ✅ implemented, tested |
 | Signal bus (`@Observable`, per‑signal granularity) | ✅ implemented, tested |
-| BLE transport (CoreBluetooth) | ⬜ next |
-| Persistence (GRDB), design system, gauges, themes | ⬜ not started |
+| iOS app: dashboard, tachometer, demo mode | ✅ builds in CI, installable |
+| CI/CD, semantic versioning, unsigned IPA, Feather source | ✅ live |
+| **BLE transport (CoreBluetooth)** | ⬜ **next — the app is demo-only until this lands** |
+| Persistence (GRDB), full 40‑theme catalogue, charts | ⬜ not started |
 
 **103 tests, 0 failures**, no compiler warnings. `KoboldCore` is pure Foundation — no CoreBluetooth, no SwiftUI — so it builds and tests on any platform including Linux CI:
 
