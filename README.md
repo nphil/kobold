@@ -143,10 +143,14 @@ The app is **sideloaded via Feather, signed with the developer's own paid Apple 
 2. ✅ **Vehicle profile engine + SAE J1979 baseline** — decode standard PIDs on any car; profile #1 loaded as data.
 3. ✅ **Signal bus** — per‑signal `@Observable` objects, derived signals.
 4. ✅ **BLE transport** — CoreBluetooth implementation of `OBDTransport`, with runtime service discovery.
-5. ⬜ **GRDB persistence** — wide+narrow sample schema; trip logging with segment boundaries.
-6. ⬜ **Design system + theming** — semantic tokens, the `ThemeStore`, a few themes end‑to‑end before scaling to 40.
-7. ⬜ **The dashboard** — Canvas gauges, live charts, the signature move, the hybrid customization model.
-8. ⬜ **In‑car surfaces** — Live Activity, StandBy layout, Guided‑Access‑friendly drive mode.
+5. ✅ **Live history + charts** — bounded ring buffer per signal, LTTB downsampling, per‑signal history behind a tap.
+6. ⬜ **Wider signal catalogue** — the profile ships **14 of ~80** standard Mode 01 PIDs. Missing and wanted: fuel level (`012F`), fuel rail pressure (`0122`/`0123` — interesting on a GDI turbo), fuel rate (`015E`), run time (`011F`), absolute load (`0143`), commanded lambda (`0144`), O₂ sensors, catalyst temps, bank‑2 trims. Also `tpmsPressure` (Mode 22 `C00B` via header `7A0`) is documented in [the PID reference](docs/reference/pid-reference.json) but never shipped — the one researched‑but‑unimplemented signal. **Do this from the car's own supported‑PID bitmask rather than by guessing**: `discoverSupportedPIDs()` already works, so enumerate what the vehicle reports and add entries for those, keeping the `knownAbsent` discipline for the rest. Gated on dashboard customisation, or more signals simply means more round trips and a slower per‑signal update rate.
+7. ⬜ **Diagnostics screen** — trouble codes on **their own surface, never on the dashboard**. `readTroubleCodes()` (Mode 03) and `DTCDecoder` already exist and are tested; what is missing is UI plus the wider read modes. Scope: Mode 03 stored / 07 pending / 0A permanent, Mode 02 freeze frame, Mode 09 VIN and calibration. Clearing (Mode 04) is permitted — the security gateway blocks write‑class UDS but not DTC read/clear — but is destructive: it erases freeze frames and resets readiness monitors, so it needs a confirmation and a plain warning. Non‑engine module codes need `ATSH` header switching, which the research warns wants a genuine non‑clone chip, so detect and degrade rather than assume. Codes need real descriptions, with manufacturer‑specific ranges honest about being unknown rather than inventing text.
+8. ⬜ **Design system + theming** — semantic tokens, the `ThemeStore`, a few themes end‑to‑end before scaling to 40. Needs a light‑mode pass first: every theme today assumes a dark background and the dashboard hardcodes `.preferredColorScheme(.dark)`.
+9. ⬜ **Dashboard customisation** — choose, reorder and size the signals shown; the density ladder from full wall to Pure mode.
+10. ⬜ **Adapter throughput** — multi‑PID batching and the expected‑response‑count digit ([docs/02](docs/02-transport-and-adapters.md)); currently one PID per round trip, ~14–15 PIDs/sec measured.
+11. ⬜ **GRDB persistence** — wide+narrow sample schema; trip logging with segment boundaries.
+12. ⬜ **In‑car surfaces** — Live Activity, StandBy layout, Guided‑Access‑friendly drive mode.
 
 ### Code layout
 
