@@ -9,11 +9,19 @@ let package = Package(
         // vehicle profiles. No CoreBluetooth, no SwiftUI — builds and tests on
         // any platform, including Linux CI.
         .library(name: "KoboldCore", targets: ["KoboldCore"]),
+        // CoreBluetooth transport. Apple-only in practice: the sources are
+        // guarded so the target still compiles to an empty module elsewhere,
+        // which keeps `swift build` working on Linux CI.
+        .library(name: "KoboldBLE", targets: ["KoboldBLE"]),
     ],
     targets: [
         .target(
             name: "KoboldCore",
             resources: [.process("Resources")]
+        ),
+        .target(
+            name: "KoboldBLE",
+            dependencies: ["KoboldCore"]
         ),
         .testTarget(
             name: "KoboldCoreTests",

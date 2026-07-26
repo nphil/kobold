@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import KoboldCore
+import KoboldBLE
 
 /// Owns the live session: transport, driver, profile and signal bus.
 ///
@@ -22,12 +23,18 @@ final class SessionModel {
             case .adapter(let name): return name
             }
         }
+
+        var isDemo: Bool { self == .demo }
     }
 
     private(set) var bus: SignalBus
     private(set) var phase: ConnectionPhase = .disconnected
     private(set) var source: Source = .demo
     private(set) var profileName: String
+
+    /// Set when a real connection attempt fails, so the UI can say why rather
+    /// than silently sitting at "disconnected".
+    private(set) var lastError: String?
 
     /// Measured end-to-end sample rate, shown because a dashboard that silently
     /// slows down is worse than one that admits it.
@@ -37,8 +44,6 @@ final class SessionModel {
     var requested: [SignalID] = [.rpm, .speed, .map, .baro, .coolantTemp, .oilTemp, .throttle, .moduleVoltage]
 
     private var profile: ResolvedProfile
-    private var driver: ELM327Driver?
-    private var transport: ReplayTransport?
     private var runTask: Task<Void, Never>?
 
     init() {
@@ -62,10 +67,20 @@ final class SessionModel {
         bus = SignalBus(profile: resolved)
     }
 
+    // MARK: - Sessions
+
     func startDemo() {
         stop()
+        lastError = nil
         source = .demo
         runTask = Task { await runDemoSession() }
+    }
+
+    func startAdapter() {
+        stop()
+        lastError = nil
+        source = .adapter("Searching…")
+        runTask = Task { await runAdapterSession() }
     }
 
     func stop() {
@@ -80,9 +95,6 @@ final class SessionModel {
         let transport = ReplayTransport(fixture: vehicle.fixture())
         let driver = ELM327Driver(transport: transport, descriptor: .generic)
 
-        self.transport = transport
-        self.driver = driver
-
         phase = .connecting
         do {
             try await driver.start()
@@ -92,42 +104,140 @@ final class SessionModel {
         }
         phase = .ready
 
-        let tick: Duration = .milliseconds(50)
+        await poll(driver: driver) { delta in
+            vehicle.advance(by: delta)
+            await transport.update(fixture: vehicle.fixture())
+        }
+
+        await driver.stop()
+    }
+
+    private func runAdapterSession() async {
+        let registry = AdapterRegistry()
+
+        // Which adapter this is cannot be known until one answers, so scanning
+        // uses the union of every registered adapter's name and profile hints.
+        // Once connected, the descriptor is re-resolved from the advertised name
+        // so the driver gets that model's timing and quirks.
+        let scanDescriptor = AdapterDescriptor(
+            id: "scan",
+            displayName: "Scanning",
+            nameMatchHints: Array(Set(registry.descriptors.flatMap(\.nameMatchHints))),
+            gattHints: registry.descriptors.flatMap(\.gattHints)
+        )
+
+        let transport = BLETransport(descriptor: scanDescriptor)
+
+        phase = .connecting
+        do {
+            try await transport.connect()
+        } catch {
+            phase = .failed("No adapter")
+            lastError = describe(error)
+            source = .demo
+            return
+        }
+
+        let name = transport.adapterName ?? "Adapter"
+        source = .adapter(name)
+
+        let driver = ELM327Driver(transport: transport,
+                                  descriptor: registry.descriptor(forAdvertisedName: name))
+
+        phase = .initialising
+        do {
+            try await driver.start()
+        } catch {
+            phase = .failed("Adapter did not respond")
+            lastError = "Connected to \(name) but it did not complete initialisation. "
+                + "Check the adapter is seated and the ignition is on."
+            await transport.disconnect()
+            return
+        }
+        phase = .ready
+
+        await poll(driver: driver, tick: nil)
+
+        await driver.stop()
+    }
+
+    /// Shared polling loop.
+    ///
+    /// `tick` lets the demo session advance its simulated ECU in step with the
+    /// reads; a real adapter has no equivalent because the car is the source of
+    /// truth.
+    private func poll(driver: ELM327Driver,
+                      tick: (@Sendable (Double) async -> Void)? = nil) async {
+        let interval: Duration = .milliseconds(50)
         var lastTime = ContinuousClock.now
         var samples = 0
         var window = ContinuousClock.now
+        var consecutiveFailures = 0
 
         while !Task.isCancelled {
             let now = ContinuousClock.now
-            let delta = Double((now - lastTime).components.attoseconds) / 1e18
-                + Double((now - lastTime).components.seconds)
+            let delta = seconds(from: now - lastTime)
             lastTime = now
 
-            vehicle.advance(by: max(0, delta))
-            await transport.update(fixture: vehicle.fixture())
+            if let tick { await tick(max(0, delta)) }
 
+            var succeededThisPass = false
             for id in requested {
                 guard !Task.isCancelled else { break }
                 guard let definition = profile.definition(for: id) else { continue }
                 if let value = try? await driver.read(definition) {
                     bus.ingest(id: id, value: value)
                     samples += 1
+                    succeededThisPass = true
                 }
             }
 
-            // Report the achieved rate roughly once a second.
+            // A live session that stops answering entirely is a disconnect, not
+            // a slow patch — this hardware sleeps and drops the link on its own.
+            if succeededThisPass {
+                consecutiveFailures = 0
+            } else {
+                consecutiveFailures += 1
+                if consecutiveFailures >= 20, !source.isDemo {
+                    phase = .failed("Adapter stopped responding")
+                    lastError = "The adapter stopped responding. It may have gone to sleep — "
+                        + "unplug it and plug it back in."
+                    break
+                }
+            }
+
             if now - window > .seconds(1) {
-                let seconds = Double((now - window).components.seconds)
-                    + Double((now - window).components.attoseconds) / 1e18
-                samplesPerSecond = seconds > 0 ? Double(samples) / seconds : 0
+                let elapsed = seconds(from: now - window)
+                samplesPerSecond = elapsed > 0 ? Double(samples) / elapsed : 0
                 samples = 0
                 window = now
             }
 
-            try? await Task.sleep(for: tick)
+            try? await Task.sleep(for: interval)
         }
+    }
 
-        await driver.stop()
+    private func seconds(from duration: Duration) -> Double {
+        Double(duration.components.seconds)
+            + Double(duration.components.attoseconds) / 1e18
+    }
+
+    private func describe(_ error: Error) -> String {
+        guard let bleError = error as? BLETransport.BLEError else {
+            return error.localizedDescription
+        }
+        switch bleError {
+        case .bluetoothUnavailable(let reason):
+            return reason
+        case .noAdapterFound:
+            return "No OBD-II adapter found. Check it is plugged in and the ignition is on."
+        case .connectionFailed(let reason):
+            return "Could not connect: \(reason)"
+        case .serialProfileNotFound:
+            return "That device does not expose a serial profile Kobold understands."
+        case .notConnected:
+            return "Not connected."
+        }
     }
 
     /// Signals the active profile can produce, in a stable display order.

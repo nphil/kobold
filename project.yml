@@ -27,6 +27,8 @@ targets:
     dependencies:
       - package: Kobold
         product: KoboldCore
+      - package: Kobold
+        product: KoboldBLE
     info:
       path: App/Info.plist
       properties:
@@ -35,6 +37,11 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:
           UIColorName: LaunchBackground
+        # Mandatory for CoreBluetooth: without it the app is terminated the
+        # first time a CBCentralManager is created.
+        NSBluetoothAlwaysUsageDescription: >-
+          Kobold connects to your OBD-II adapter over Bluetooth to read live
+          data from your car.
         # Without this, every animation is capped at 60fps on iPhone even on
         # ProMotion hardware. It is opt-in because high refresh costs battery.
         CADisableMinimumFrameDurationOnPhone: true

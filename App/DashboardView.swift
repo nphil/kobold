@@ -18,6 +18,7 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: 22) {
                     header
+                    errorBanner
 
                     if let rpm = session.bus.signal(.rpm) {
                         TachometerView(signal: rpm, caption: "RPM")
@@ -65,25 +66,69 @@ struct DashboardView: View {
 
     private var statusPill: some View {
         let ready = session.phase == .ready
-        return HStack(spacing: 7) {
-            Circle()
-                .fill(ready ? theme.accent : theme.textTertiary)
-                .frame(width: 8, height: 8)
-                // A slow pulse reads as "live" without competing with the data.
-                .opacity(ready ? 1 : 0.5)
-            Text(session.source.label)
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(theme.textSecondary)
+        let failed = isFailed(session.phase)
+
+        return Menu {
+            Button {
+                session.startAdapter()
+            } label: {
+                Label("Connect to adapter", systemImage: "antenna.radiowaves.left.and.right")
+            }
+            Button {
+                session.startDemo()
+            } label: {
+                Label("Demo mode", systemImage: "play.circle")
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(failed ? theme.danger : (ready ? theme.accent : theme.textTertiary))
+                    .frame(width: 8, height: 8)
+                    .opacity(ready ? 1 : 0.55)
+                Text(session.source.label)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(theme.textSecondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(theme.surfaceRaised))
+            .overlay(Capsule().strokeBorder(failed ? theme.danger.opacity(0.6) : theme.hairline,
+                                            lineWidth: 1))
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 7)
-        .background(
-            Capsule().fill(theme.surfaceRaised)
-        )
-        .overlay(
-            Capsule().strokeBorder(theme.hairline, lineWidth: 1)
-        )
         .animation(KoboldMotion.ui, value: ready)
+        .accessibilityLabel("Data source, currently \(session.source.label)")
+    }
+
+    private func isFailed(_ phase: ConnectionPhase) -> Bool {
+        if case .failed = phase { return true }
+        return false
+    }
+
+    /// Connection problems are stated plainly with the likely cause. This
+    /// hardware fails in specific, knowable ways — asleep, unseated, ignition
+    /// off — and a bare "connection error" would leave the user guessing.
+    @ViewBuilder
+    private var errorBanner: some View {
+        if let message = session.lastError {
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(theme.caution)
+                Text(message)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(theme.surface))
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(theme.caution.opacity(0.35), lineWidth: 1)
+            )
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
     }
 
     private var themeButton: some View {
