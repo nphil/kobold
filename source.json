@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.8.1",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.8.1\n\n### Fixes\n\n- parse CAN headers when spaces are off (`ce33afb`)\n\n**Full changelog:** `v0.8.0...v0.8.1`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.8.1/Kobold-0.8.1-unsigned.ipa",
+          "size": 605475,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.8.0",
           "date": "2026-07-26",
           "localizedDescription": "## v0.8.0\n\n### Features\n\n- ask the car which PIDs it answers instead of guessing (`8cf606e`)\n\n**Full changelog:** `v0.7.0...v0.8.0`",
