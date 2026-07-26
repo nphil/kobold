@@ -65,10 +65,19 @@ public actor ELM327Driver {
     /// Protocol number reported by `ATDPN`, once known.
     public private(set) var negotiatedProtocol: String?
 
+    /// A protocol number learned on a previous connection, if any.
+    ///
+    /// Supplying it turns the slowest part of connecting into the fastest: the
+    /// adapter is told which protocol to use instead of discovering it, so the
+    /// search is skipped entirely.
+    private let preferredProtocol: String?
+
     public init(transport: any OBDTransport,
-                descriptor: AdapterDescriptor = .generic) {
+                descriptor: AdapterDescriptor = .generic,
+                preferredProtocol: String? = nil) {
         self.transport = transport
         self.descriptor = descriptor
+        self.preferredProtocol = preferredProtocol
         self.timing = AdaptiveTiming(initial: descriptor.initialTimeout)
     }
 
@@ -157,6 +166,31 @@ public actor ELM327Driver {
     /// Auto-detects the bus protocol: `ATSP0`, provoke a real request, then read
     /// back what was negotiated with `ATDPN`.
     private func detectProtocol() async throws {
+        // Fast path: a protocol already negotiated with this adapter on a
+        // previous connection. The search is the slow part of connecting — the
+        // link itself takes well under a second — so skipping it is the whole
+        // difference between a snappy reconnect and waiting around.
+        //
+        // `ATSP A<n>` rather than `ATSP <n>`: the `A` means "use this one, but
+        // fall back to searching if it does not answer", so a remembered
+        // protocol can never strand the app on a different car or a rewired
+        // bus. Being wrong costs one short timeout, not a failed connection.
+        if let remembered = preferredProtocol, !remembered.isEmpty {
+            _ = try? await sendRaw("ATSPA\(remembered)", timeout: descriptor.initialTimeout)
+
+            if let reply = try? await send("0100",
+                                           timeout: descriptor.searchTimeout,
+                                           retries: 1),
+               reply.isData {
+                await readNegotiatedProtocol()
+                Log.info(.elm327, "Reused protocol \(remembered) — search skipped")
+                return
+            }
+
+            Log.info(.elm327, "Remembered protocol \(remembered) did not answer; "
+                     + "falling back to a full search")
+        }
+
         _ = try? await sendRaw("ATSP0", timeout: descriptor.initialTimeout)
 
         // `0100` forces negotiation; the reply may be preceded by `SEARCHING...`,
@@ -173,7 +207,11 @@ public actor ELM327Driver {
 
         let probe: ELM327Reply
         do {
-            probe = try await send("0100", timeout: budget, retries: 2)
+            // One attempt, not several: retries multiply the budget, and three
+            // tries at 25s each would be a 75-second ceiling rather than the
+            // 25 this is meant to be. The adapter is already retrying
+            // internally — that is what the protocol search *is*.
+            probe = try await send("0100", timeout: budget, retries: 0)
         } catch ELM327Error.timeout {
             // A timeout here is not "the adapter is broken" — it answered every
             // AT command to get this far. It means the protocol search ran to
@@ -193,11 +231,32 @@ public actor ELM327Driver {
             throw ELM327Error.protocolNegotiationFailed
         }
         Log.info(.elm327, "0100 answered \(probe.summary); protocol negotiated")
+        await readNegotiatedProtocol()
+    }
 
-        if case .data(let lines) = try await sendRaw("ATDPN",
-                                                    timeout: descriptor.initialTimeout) {
-            negotiatedProtocol = lines.first
+    /// Reads back what the adapter settled on, so the next connection can skip
+    /// the search.
+    ///
+    /// `ATDPN` reports an automatically-detected protocol with a leading `A`
+    /// (`A6` meaning "auto-detected, protocol 6"). That prefix is stripped
+    /// before storing, because what gets replayed later is the number — the
+    /// caller re-applies the auto-fallback prefix itself. Protocol identifiers
+    /// are single characters `0`–`9` and `A`–`C`, so a bare `A` is a real
+    /// protocol and must not be mistaken for the marker.
+    private func readNegotiatedProtocol() async {
+        guard case .data(let lines)? = try? await sendRaw("ATDPN",
+                                                          timeout: descriptor.initialTimeout),
+              var reported = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+              !reported.isEmpty
+        else { return }
+
+        if reported.count > 1, reported.hasPrefix("A") {
+            reported.removeFirst()
         }
+
+        let identifier = reported
+        negotiatedProtocol = identifier
+        Log.info(.elm327, "Protocol \(identifier) recorded for next time")
     }
 
     // MARK: - Commands

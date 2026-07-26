@@ -193,7 +193,8 @@ final class SessionModel {
         await setSource(.adapter(name))
 
         let driver = ELM327Driver(transport: transport,
-                                  descriptor: registry.descriptor(forAdvertisedName: name))
+                                  descriptor: registry.descriptor(forAdvertisedName: name),
+                                  preferredProtocol: Self.rememberedProtocol(for: name))
 
         await setPhase(.initialising)
         do {
@@ -207,7 +208,10 @@ final class SessionModel {
             return
         }
 
-        let negotiated = await driver.negotiatedProtocol ?? "unknown"
+        let resolved = await driver.negotiatedProtocol
+        Self.remember(protocol: resolved, for: name)
+
+        let negotiated = resolved ?? "unknown"
         Log.info(.elm327, "Ready on \(name), protocol \(negotiated)")
         await setPhase(.ready)
 
@@ -303,6 +307,34 @@ final class SessionModel {
     private nonisolated static func seconds(_ duration: Duration) -> Double {
         Double(duration.components.seconds)
             + Double(duration.components.attoseconds) / 1e18
+    }
+
+    // MARK: - Remembered protocol
+
+    // Negotiating the bus protocol from scratch is by far the slowest step in
+    // connecting — the BLE link and the AT init together take under three
+    // seconds, while an unassisted `ATSP0` search can take tens. The answer
+    // never changes for a given car, so it is worth exactly one round trip to
+    // learn and then never pay for again.
+    //
+    // Keyed by adapter name rather than stored globally: plugging a different
+    // dongle into a different car must not inherit the wrong protocol. Being
+    // wrong is cheap anyway — the driver applies it with the auto-fallback
+    // prefix, so a stale value costs one short timeout, not a failure.
+
+    private static func protocolKey(for adapter: String) -> String {
+        "protocol.\(adapter)"
+    }
+
+    private nonisolated static func rememberedProtocol(for adapter: String) -> String? {
+        let stored = UserDefaults.standard.string(forKey: protocolKey(for: adapter))
+        guard let stored, !stored.isEmpty else { return nil }
+        return stored
+    }
+
+    private nonisolated static func remember(protocol negotiated: String?, for adapter: String) {
+        guard let negotiated, !negotiated.isEmpty else { return }
+        UserDefaults.standard.set(negotiated, forKey: protocolKey(for: adapter))
     }
 
     /// Turns an init failure into advice the user can act on.

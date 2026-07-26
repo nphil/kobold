@@ -359,3 +359,74 @@ final class TransportConnectIdempotencyTests: XCTestCase {
         await driver.stop()
     }
 }
+
+/// Reconnecting must not repeat the protocol search.
+///
+/// The search is the slow part of connecting — the BLE link and the AT init
+/// together take under three seconds, while an unassisted `ATSP0` search can
+/// take tens of seconds because the adapter tries every protocol in turn. The
+/// answer never changes for a given car, so it is learned once and replayed.
+final class ProtocolMemoryTests: XCTestCase {
+
+    private func fixture() -> ReplayTransport.Fixture {
+        var fixture = ReplayTransport.Fixture.idlingEngine()
+        // `ATDPN` reports an auto-detected protocol with a leading marker.
+        fixture.responses["ATDPN"] = ["A6"]
+        fixture.responses["ATSPA6"] = ["OK"]
+        return fixture
+    }
+
+    func testFirstConnectionLearnsTheProtocolWithoutTheAutoMarker() async throws {
+        let transport = ReplayTransport(fixture: fixture())
+        let driver = ELM327Driver(transport: transport, descriptor: .generic)
+        try await driver.start()
+
+        // Stored as the bare identifier: the "A" only means "auto-detected",
+        // and the caller re-applies it as the fallback prefix next time.
+        let learned = await driver.negotiatedProtocol
+        XCTAssertEqual(learned, "6")
+
+        await driver.stop()
+    }
+
+    func testRememberedProtocolSkipsTheSearch() async throws {
+        let transport = ReplayTransport(fixture: fixture())
+        let driver = ELM327Driver(transport: transport,
+                                  descriptor: .generic,
+                                  preferredProtocol: "6")
+        try await driver.start()
+
+        let sent = await transport.sentCommands
+        XCTAssertTrue(sent.contains("ATSPA6"),
+                      "should set the remembered protocol with the auto-fallback prefix")
+        XCTAssertFalse(sent.contains("ATSP0"),
+                       "should not fall back to a full search when the remembered one answers")
+
+        let phase = await driver.phase
+        XCTAssertEqual(phase, .ready)
+
+        await driver.stop()
+    }
+
+    func testNoMemoryMeansAFullSearch() async throws {
+        let transport = ReplayTransport(fixture: fixture())
+        let driver = ELM327Driver(transport: transport, descriptor: .generic)
+        try await driver.start()
+
+        let sent = await transport.sentCommands
+        XCTAssertTrue(sent.contains("ATSP0"))
+        XCTAssertFalse(sent.contains { $0.hasPrefix("ATSPA") },
+                       "nothing to replay, so no protocol should be forced")
+
+        await driver.stop()
+    }
+
+    // Not covered here: a *stale* remembered protocol degrading to a search.
+    // `ReplayTransport` answers by command name alone, so it cannot express
+    // "0100 fails on protocol 9 but succeeds after ATSP0" — the state the
+    // fallback exists for. Writing a test against this fixture would assert
+    // only that the fast path works, under a name claiming otherwise. The
+    // safety net is in the command itself: `ATSP A<n>` asks the adapter to fall
+    // back to searching on its own, so the behaviour belongs to the hardware
+    // rather than to code this suite could exercise.
+}
