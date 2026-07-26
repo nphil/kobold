@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.1
+
+### Fixes
+
+- union the supported-PID bitmask across every module that answers (`c7af396`)
+
+**Full changelog:** `v0.14.0...v0.14.1`
+
 ## v0.14.0
 
 ### Features
