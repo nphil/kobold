@@ -5,142 +5,433 @@
       "id": "sae-j1979-core",
       "displayName": "Standard OBD-II (SAE J1979)",
       "ecuHeaders": {
-        "engine": { "transmit": "7E0", "receive": "7E8" }
+        "engine": {
+          "transmit": "7E0",
+          "receive": "7E8"
+        }
       },
       "signals": [
-        { "id": "engineLoad", "label": "Engine Load", "header": "7E0", "mode": "01", "pid": "04",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": { "factor": 100, "divisor": 255 }, "unit": "pct",
-          "minimum": 0, "maximum": 100 },
-
-        { "id": "coolantTemp", "label": "Coolant Temp", "header": "7E0", "mode": "01", "pid": "05",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": { "postOffset": -40 }, "unit": "degC",
-          "minimum": -40, "maximum": 215, "redline": 110 },
-
-        { "id": "shortTrimB1", "label": "Short Fuel Trim B1", "header": "7E0", "mode": "01", "pid": "06",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": { "factor": 100, "divisor": 128, "postOffset": -100 }, "unit": "pct",
-          "minimum": -100, "maximum": 99.2 },
-
-        { "id": "longTrimB1", "label": "Long Fuel Trim B1", "header": "7E0", "mode": "01", "pid": "07",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": { "factor": 100, "divisor": 128, "postOffset": -100 }, "unit": "pct",
-          "minimum": -100, "maximum": 99.2 },
-
-        { "id": "map", "label": "Intake Manifold Pressure", "header": "7E0", "mode": "01", "pid": "0B",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": {}, "unit": "kPa",
-          "minimum": 0, "maximum": 255 },
-
-        { "id": "rpm", "label": "Engine RPM", "header": "7E0", "mode": "01", "pid": "0C",
-          "byteOffset": 0, "byteCount": 2,
-          "conversion": { "divisor": 4 }, "unit": "rpm",
-          "minimum": 0, "maximum": 8000, "redline": 6500 },
-
-        { "id": "speed", "label": "Vehicle Speed", "header": "7E0", "mode": "01", "pid": "0D",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": {}, "unit": "kmh",
-          "minimum": 0, "maximum": 255 },
-
-        { "id": "timingAdvance", "label": "Timing Advance", "header": "7E0", "mode": "01", "pid": "0E",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": { "divisor": 2, "postOffset": -64 }, "unit": "deg",
-          "minimum": -64, "maximum": 63.5 },
-
-        { "id": "intakeTemp", "label": "Intake Air Temp", "header": "7E0", "mode": "01", "pid": "0F",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": { "postOffset": -40 }, "unit": "degC",
-          "minimum": -40, "maximum": 215 },
-
-        { "id": "maf", "label": "Mass Air Flow", "header": "7E0", "mode": "01", "pid": "10",
-          "byteOffset": 0, "byteCount": 2,
-          "conversion": { "divisor": 100 }, "unit": "gps",
-          "minimum": 0, "maximum": 655.35 },
-
-        { "id": "throttle", "label": "Throttle Position", "header": "7E0", "mode": "01", "pid": "11",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": { "factor": 100, "divisor": 255 }, "unit": "pct",
-          "minimum": 0, "maximum": 100 },
-
-        { "id": "baro", "label": "Barometric Pressure", "header": "7E0", "mode": "01", "pid": "33",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": {}, "unit": "kPa",
-          "minimum": 0, "maximum": 255 },
-
-        { "id": "moduleVoltage", "label": "Module Voltage", "header": "7E0", "mode": "01", "pid": "42",
-          "byteOffset": 0, "byteCount": 2,
-          "conversion": { "divisor": 1000 }, "unit": "V",
-          "minimum": 0, "maximum": 65.535 },
-
-        { "id": "ambientTemp", "label": "Ambient Air Temp", "header": "7E0", "mode": "01", "pid": "46",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": { "postOffset": -40 }, "unit": "degC",
-          "minimum": -40, "maximum": 215 }
+        {
+          "id": "ambientTemp",
+          "label": "Ambient Air Temp",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "46",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "postOffset": -40
+          },
+          "unit": "degC",
+          "minimum": -40,
+          "maximum": 215
+        },
+        {
+          "id": "baro",
+          "label": "Barometric Pressure",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "33",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {},
+          "unit": "kPa",
+          "minimum": 0,
+          "maximum": 255
+        },
+        {
+          "id": "coolantTemp",
+          "label": "Coolant Temp",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "05",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "postOffset": -40
+          },
+          "unit": "degC",
+          "minimum": -40,
+          "maximum": 215,
+          "redline": 110
+        },
+        {
+          "id": "engineLoad",
+          "label": "Engine Load",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "04",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 255
+          },
+          "unit": "pct",
+          "minimum": 0,
+          "maximum": 100
+        },
+        {
+          "id": "fuelLevel",
+          "label": "Fuel Level",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "2F",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 255
+          },
+          "unit": "pct",
+          "minimum": 0,
+          "maximum": 100
+        },
+        {
+          "id": "fuelPressure",
+          "label": "Fuel Pressure",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "0A",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 3
+          },
+          "unit": "kPa",
+          "minimum": 0,
+          "maximum": 765
+        },
+        {
+          "id": "fuelRailPressureDirect",
+          "label": "Fuel Rail Pressure",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "23",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "factor": 10
+          },
+          "unit": "kPa",
+          "minimum": 0,
+          "maximum": 30000
+        },
+        {
+          "id": "fuelRailPressureRelative",
+          "label": "Fuel Rail Pressure (rel. manifold)",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "22",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "factor": 0.079
+          },
+          "unit": "kPa",
+          "minimum": 0,
+          "maximum": 6000
+        },
+        {
+          "id": "intakeTemp",
+          "label": "Intake Air Temp",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "0F",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "postOffset": -40
+          },
+          "unit": "degC",
+          "minimum": -40,
+          "maximum": 215
+        },
+        {
+          "id": "longTrimB1",
+          "label": "Long Fuel Trim B1",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "07",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 128,
+            "postOffset": -100
+          },
+          "unit": "pct",
+          "minimum": -100,
+          "maximum": 99.2
+        },
+        {
+          "id": "maf",
+          "label": "Mass Air Flow",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "10",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "divisor": 100
+          },
+          "unit": "gps",
+          "minimum": 0,
+          "maximum": 655.35
+        },
+        {
+          "id": "map",
+          "label": "Intake Manifold Pressure",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "0B",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {},
+          "unit": "kPa",
+          "minimum": 0,
+          "maximum": 255
+        },
+        {
+          "id": "moduleVoltage",
+          "label": "Module Voltage",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "42",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "divisor": 1000
+          },
+          "unit": "V",
+          "minimum": 0,
+          "maximum": 65.535
+        },
+        {
+          "id": "rpm",
+          "label": "Engine RPM",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "0C",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "divisor": 4
+          },
+          "unit": "rpm",
+          "minimum": 0,
+          "maximum": 8000,
+          "redline": 6500
+        },
+        {
+          "id": "runTime",
+          "label": "Run Time",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "1F",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {},
+          "unit": "s",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        {
+          "id": "shortTrimB1",
+          "label": "Short Fuel Trim B1",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "06",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 128,
+            "postOffset": -100
+          },
+          "unit": "pct",
+          "minimum": -100,
+          "maximum": 99.2
+        },
+        {
+          "id": "speed",
+          "label": "Vehicle Speed",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "0D",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {},
+          "unit": "kmh",
+          "minimum": 0,
+          "maximum": 255
+        },
+        {
+          "id": "throttle",
+          "label": "Throttle Position",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "11",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 255
+          },
+          "unit": "pct",
+          "minimum": 0,
+          "maximum": 100
+        },
+        {
+          "id": "timingAdvance",
+          "label": "Timing Advance",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "0E",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "divisor": 2,
+            "postOffset": -64
+          },
+          "unit": "deg",
+          "minimum": -64,
+          "maximum": 63.5
+        }
       ],
       "derivedSignals": [],
       "knownAbsent": []
     },
-
     {
       "id": "hyundai-kia-genesis-theta2-turbo",
       "displayName": "Hyundai/Kia/Genesis Theta-II 2.0T",
       "inherits": "sae-j1979-core",
       "ecuHeaders": {
-        "engine": { "transmit": "7E0", "receive": "7E8" },
-        "transmission": { "transmit": "7E1", "receive": "7E9" },
-        "tpms": { "transmit": "7A0", "receive": "7A8" }
+        "engine": {
+          "transmit": "7E0",
+          "receive": "7E8"
+        },
+        "transmission": {
+          "transmit": "7E1",
+          "receive": "7E9"
+        },
+        "tpms": {
+          "transmit": "7A0",
+          "receive": "7A8"
+        }
       },
       "signals": [
-        { "id": "oilTemp", "label": "Engine Oil Temp", "header": "7E0", "mode": "22", "pid": "E001",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": { "factor": 0.75, "postOffset": -48 }, "unit": "degC",
-          "minimum": -48, "maximum": 143, "redline": 130 },
-
-        { "id": "transFluidTemp", "label": "Transmission Fluid Temp", "header": "7E1", "mode": "21", "pid": "A0",
-          "byteOffset": 0, "byteCount": 1,
-          "conversion": { "postOffset": -40 }, "unit": "degC",
-          "minimum": -40, "maximum": 215, "redline": 120 }
+        {
+          "id": "oilTemp",
+          "label": "Engine Oil Temp",
+          "header": "7E0",
+          "mode": "22",
+          "pid": "E001",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 0.75,
+            "postOffset": -48
+          },
+          "unit": "degC",
+          "minimum": -48,
+          "maximum": 143,
+          "redline": 130
+        },
+        {
+          "id": "transFluidTemp",
+          "label": "Transmission Fluid Temp",
+          "header": "7E1",
+          "mode": "21",
+          "pid": "A0",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "postOffset": -40
+          },
+          "unit": "degC",
+          "minimum": -40,
+          "maximum": 215,
+          "redline": 120
+        }
       ],
       "derivedSignals": [
-        { "id": "boost", "label": "Boost Pressure",
-          "operation": { "difference": { "lhs": "map", "rhs": "baro", "clampLow": 0 } },
-          "unit": "kPa", "minimum": 0, "maximum": 150, "redline": 110 }
+        {
+          "id": "boost",
+          "label": "Boost Pressure",
+          "operation": {
+            "difference": {
+              "lhs": "map",
+              "rhs": "baro",
+              "clampLow": 0
+            }
+          },
+          "unit": "kPa",
+          "minimum": 0,
+          "maximum": 150,
+          "redline": 110
+        }
       ],
       "knownAbsent": [
-        { "id": "maf",
-          "reason": "Speed-density (MAP-based) engine; Mode 01 PID 10 is unreliable or unsupported. Air mass is estimated from MAP, RPM and IAT instead." }
+        {
+          "id": "maf",
+          "reason": "Speed-density (MAP-based) engine; Mode 01 PID 10 is unreliable or unsupported. Air mass is estimated from MAP, RPM and IAT instead."
+        }
       ]
     },
-
     {
       "id": "genesis-g70-2020-2.0t-awd",
       "displayName": "Genesis G70 2.0T AWD (2020)",
       "inherits": "hyundai-kia-genesis-theta2-turbo",
       "ecuHeaders": {
-        "engine": { "transmit": "7E0", "receive": "7E8" },
-        "transmission": { "transmit": "7E1", "receive": "7E9" },
-        "tpms": { "transmit": "7A0", "receive": "7A8" }
+        "engine": {
+          "transmit": "7E0",
+          "receive": "7E8"
+        },
+        "transmission": {
+          "transmit": "7E1",
+          "receive": "7E9"
+        },
+        "tpms": {
+          "transmit": "7A0",
+          "receive": "7A8"
+        }
       },
       "signals": [],
       "derivedSignals": [],
       "knownAbsent": [
-        { "id": "knockRetard",
-          "reason": "Not exposed in Mode 01 and no public extended PID is documented for this generation." },
-        { "id": "cvvtAngle",
-          "reason": "No public PID documented for this platform." },
-        { "id": "injectorPulseWidth",
-          "reason": "No public PID documented for this generation." },
-        { "id": "gearPosition",
-          "reason": "The 8-speed automatic is under-documented compared with the older 4/6-speed units; no confirmed PID." },
-        { "id": "htracClutchDuty",
-          "reason": "AWD clutch duty and torque split are broadcast on the CAN bus but have no documented query/response PID; reading them would require raw CAN sniffing." },
-        { "id": "steeringAngle",
-          "reason": "Broadcast CAN frame, not an ELM327 query/response PID." },
-        { "id": "brakePressure",
-          "reason": "ABS/ESC broadcast; no documented PID." },
-        { "id": "perWheelSpeed",
-          "reason": "ABS broadcast; no documented PID." }
+        {
+          "id": "knockRetard",
+          "reason": "Not exposed in Mode 01 and no public extended PID is documented for this generation."
+        },
+        {
+          "id": "cvvtAngle",
+          "reason": "No public PID documented for this platform."
+        },
+        {
+          "id": "injectorPulseWidth",
+          "reason": "No public PID documented for this generation."
+        },
+        {
+          "id": "gearPosition",
+          "reason": "The 8-speed automatic is under-documented compared with the older 4/6-speed units; no confirmed PID."
+        },
+        {
+          "id": "htracClutchDuty",
+          "reason": "AWD clutch duty and torque split are broadcast on the CAN bus but have no documented query/response PID; reading them would require raw CAN sniffing."
+        },
+        {
+          "id": "steeringAngle",
+          "reason": "Broadcast CAN frame, not an ELM327 query/response PID."
+        },
+        {
+          "id": "brakePressure",
+          "reason": "ABS/ESC broadcast; no documented PID."
+        },
+        {
+          "id": "perWheelSpeed",
+          "reason": "ABS broadcast; no documented PID."
+        }
       ]
     }
   ]

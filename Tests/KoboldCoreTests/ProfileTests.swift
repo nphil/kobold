@@ -264,3 +264,69 @@ final class SupportedSignalsTests: XCTestCase {
         XCTAssertEqual(split.unsupported.map(\.rawValue), ["rpm"])
     }
 }
+
+/// Fuel-system signals, added to chase an extended-crank-after-sitting fault on
+/// the reference car.
+///
+/// The hypothesis they exist to test is fuel rail pressure bleeding down while
+/// the car sits: a healthy direct-injection rail holds pressure, a leaking pump
+/// check valve or seeping injector does not, and the engine cannot fire until
+/// the high-pressure pump rebuilds it. That is a number, so it is worth
+/// measuring rather than guessing at.
+///
+/// These are SAE J1979 standard PIDs rather than anything vehicle-specific, and
+/// the supported-PID bitmask decides which the car actually answers — so one it
+/// does not implement is dropped at connect and named in the log, not polled
+/// forever for NO DATA.
+final class FuelSystemSignalTests: XCTestCase {
+
+    private func g70() throws -> ResolvedProfile {
+        try ProfileStore.bundled().resolve(id: "genesis-g70-2020-2.0t-awd")
+    }
+
+    func testFuelSignalsResolveOnTheReferenceCar() throws {
+        let profile = try g70()
+        for id: SignalID in ["fuelRailPressureDirect", "fuelRailPressureRelative",
+                             "fuelPressure", "fuelLevel", "runTime"] {
+            XCTAssertNotNil(profile.definition(for: id), "\(id.rawValue) should resolve")
+        }
+    }
+
+    func testCommandsAreWellFormed() throws {
+        let profile = try g70()
+        XCTAssertEqual(profile.definition(for: "fuelRailPressureDirect")?.command, "0123")
+        XCTAssertEqual(profile.definition(for: "fuelRailPressureRelative")?.command, "0122")
+        XCTAssertEqual(profile.definition(for: "fuelPressure")?.command, "010A")
+        XCTAssertEqual(profile.definition(for: "fuelLevel")?.command, "012F")
+        XCTAssertEqual(profile.definition(for: "runTime")?.command, "011F")
+    }
+
+    /// PID 23 is two bytes scaled by 10 kPa — the direct-injection rail, which
+    /// runs in the hundreds of bar rather than the single digits a port-injected
+    /// engine shows.
+    func testDirectRailPressureScaling() throws {
+        let definition = try XCTUnwrap(try g70().definition(for: "fuelRailPressureDirect"))
+
+        // 0x0BB8 = 3000 → 30 000 kPa = 300 bar, a plausible loaded GDI rail.
+        XCTAssertEqual(try PIDDecoder.decode(data: [0x0B, 0xB8], using: definition), 30_000, accuracy: 0.001)
+        // The reading the bleed-down hypothesis predicts at key-on after a sit.
+        XCTAssertEqual(try PIDDecoder.decode(data: [0x00, 0x00], using: definition), 0, accuracy: 0.001)
+    }
+
+    func testRelativeRailPressureScaling() throws {
+        let definition = try XCTUnwrap(try g70().definition(for: "fuelRailPressureRelative"))
+        // 0.079 kPa per bit.
+        XCTAssertEqual(try PIDDecoder.decode(data: [0x27, 0x10], using: definition), 790, accuracy: 0.01)
+    }
+
+    func testFuelLevelIsAPercentage() throws {
+        let definition = try XCTUnwrap(try g70().definition(for: "fuelLevel"))
+        XCTAssertEqual(try PIDDecoder.decode(data: [0xFF], using: definition), 100, accuracy: 0.01)
+        XCTAssertEqual(try PIDDecoder.decode(data: [0x80], using: definition), 50.196, accuracy: 0.01)
+    }
+
+    func testRunTimeIsSecondsUnscaled() throws {
+        let definition = try XCTUnwrap(try g70().definition(for: "runTime"))
+        XCTAssertEqual(try PIDDecoder.decode(data: [0x01, 0x2C], using: definition), 300, accuracy: 0.001)
+    }
+}
