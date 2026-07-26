@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.5.3",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.5.3\n\n### Fixes\n\n- give protocol negotiation a budget it can actually finish in (`f93375a`)\n\n**Full changelog:** `v0.5.2...v0.5.3`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.5.3/Kobold-0.5.3-unsigned.ipa",
+          "size": 594181,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.5.2",
           "date": "2026-07-26",
           "localizedDescription": "## v0.5.2\n\n### Fixes\n\n- stop tearing down the connection we just established (`c5bfa00`)\n\n**Full changelog:** `v0.5.1...v0.5.2`",
