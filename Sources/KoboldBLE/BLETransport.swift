@@ -93,7 +93,11 @@ public final class BLETransport: NSObject, OBDTransport, @unchecked Sendable {
                     let id = UUID()
                     self.streams[id] = inner
                     inner.onTermination = { [weak self] _ in
-                        self?.queue.async { self?.streams.removeValue(forKey: id) }
+                        // Resolved once, here. Reading the weak reference again
+                        // from inside the queue closure would be a second,
+                        // concurrent read of the same captured variable.
+                        guard let self else { return }
+                        self.queue.async { self.streams.removeValue(forKey: id) }
                     }
                 }
                 continuation.resume(returning: stream)
@@ -333,7 +337,8 @@ extension BLETransport: CBPeripheralDelegate {
 
     public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard error == nil, let services = peripheral.services, !services.isEmpty else {
-            Log.error(.transport, "Service discovery failed: \(error?.localizedDescription ?? "no services")")
+            let reason = error?.localizedDescription ?? "no services"
+            Log.error(.transport, "Service discovery failed: \(reason)")
             teardown(state: .failed("No services found"))
             finishConnect(.failure(BLEError.serialProfileNotFound))
             return
@@ -341,11 +346,13 @@ extension BLETransport: CBPeripheralDelegate {
         // Recorded in full because supporting a new adapter starts with knowing
         // what it actually exposes, and this is the only chance to see it.
         //
-        // Flattened to a String here rather than inside the log call: the message
-        // is an escaping @Sendable autoclosure, and CoreBluetooth's classes are
-        // not Sendable, so they must not be what gets captured.
+        // Flattened to Strings and Ints here rather than inside the log call: the
+        // message is an escaping @Sendable autoclosure, and CoreBluetooth's
+        // classes are not Sendable, so nothing from them may be captured — not
+        // even to read `.count` off the array.
+        let count = services.count
         let summary = services.map { $0.uuid.uuidString }.joined(separator: ", ")
-        Log.info(.transport, "Discovered \(services.count) services: \(summary)")
+        Log.info(.transport, "Discovered \(count) services: \(summary)")
         servicesAwaitingDiscovery = services.count
         for service in services {
             peripheral.discoverCharacteristics(nil, for: service)

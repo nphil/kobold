@@ -30,10 +30,11 @@ This repository contains the **architecture brief** (`docs/`) and the **first wo
 | Signal bus (`@Observable`, per‑signal granularity) | ✅ implemented, tested |
 | iOS app: dashboard, tachometer, demo mode | ✅ builds in CI, installable |
 | CI/CD, semantic versioning, unsigned IPA, Feather source | ✅ live |
-| **BLE transport (CoreBluetooth)** | ⬜ **next — the app is demo-only until this lands** |
-| Persistence (GRDB), full 40‑theme catalogue, charts | ⬜ not started |
+| BLE transport (CoreBluetooth, runtime GATT discovery) | ✅ implemented |
+| Logging + diagnostics (OSLog, ntfy, frame counter) | ✅ implemented, tested |
+| **Persistence (GRDB), full 40‑theme catalogue, charts** | ⬜ **next** |
 
-**103 tests, 0 failures**, no compiler warnings. `KoboldCore` is pure Foundation — no CoreBluetooth, no SwiftUI — so it builds and tests on any platform including Linux CI:
+**113 tests, 0 failures**, no compiler warnings. `KoboldCore` is pure Foundation — no CoreBluetooth, no SwiftUI — so it builds and tests on any platform including Linux CI:
 
 ```bash
 swift build && swift test
@@ -141,7 +142,7 @@ The app is **sideloaded via Feather, signed with the developer's own paid Apple 
 1. ✅ **Transport + adapter driver + replay** — ELM327 command loop, with a replay transport so the rest is buildable without a car.
 2. ✅ **Vehicle profile engine + SAE J1979 baseline** — decode standard PIDs on any car; profile #1 loaded as data.
 3. ✅ **Signal bus** — per‑signal `@Observable` objects, derived signals.
-4. ⬜ **BLE transport** — CoreBluetooth implementation of `OBDTransport`, with runtime service discovery.
+4. ✅ **BLE transport** — CoreBluetooth implementation of `OBDTransport`, with runtime service discovery.
 5. ⬜ **GRDB persistence** — wide+narrow sample schema; trip logging with segment boundaries.
 6. ⬜ **Design system + theming** — semantic tokens, the `ThemeStore`, a few themes end‑to‑end before scaling to 40.
 7. ⬜ **The dashboard** — Canvas gauges, live charts, the signature move, the hybrid customization model.
@@ -157,7 +158,22 @@ Sources/KoboldCore/
 ├── Signals/      SignalID/Unit · LiveSignal · SignalBus
 ├── Adapter/      AdapterDescriptor · AdapterRegistry
 └── Resources/    profiles.json  ← the vehicle catalogue, as data
+
+Sources/KoboldBLE/   CoreBluetooth transport — GATT profile discovered by role at runtime
+Sources/KoboldLog/   Logger actor · ConsoleSink (OSLog) · NtfySink (batched remote)
 ```
+
+### Debugging a build that lives in a car
+
+The interesting failures happen with no Xcode in reach, so the app carries its
+own instrumentation. **Diagnostics** (theme menu → Diagnostics) shows the
+achieved frame rate against the display's maximum, the worst frame interval in
+the last window, and the recent log buffer. It can also forward warnings and
+errors to an [ntfy](https://ntfy.sh) topic, off by default.
+
+> On the public ntfy server **the topic name is the password** — anyone who
+> knows or guesses it can read everything published to it. Keep the random
+> topic the app generates, or self-host. See [docs/04](docs/04-app-architecture.md#diagnostics--logging-out-of-a-device-you-cant-attach-a-debugger-to).
 
 ---
 
