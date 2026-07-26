@@ -67,6 +67,14 @@ Three deliberate choices:
 
 Both marker forms are matched only where they are unambiguously deliberate — in a subject line, or alone on their own line in a body. Matching anywhere in a body would let a commit that merely *describes* the marker (release notes, this very document) suppress a release. The same applies to `BREAKING CHANGE:`, which must be line-anchored with a colon.
 
+> **A subject that merely mentions the marker still counts.** The commit that introduced the rule above was called *"make `[skip release]` defer one push, not the whole branch"* — and promptly skipped its own release. Subject matching is unconditional on purpose: a subject is short and deliberate, and demanding more structure there would make the marker awkward to use for the thing it is for. The escape hatch is the forced bump, which outranks any marker:
+>
+> ```
+> gh workflow run release.yml -f bump=minor
+> ```
+>
+> If you need to write about the marker in a subject, expect to release by hand.
+
 Housekeeping-only pushes produce no release, so documentation and CI tweaks don't churn out versions.
 
 ## Shipping the app
