@@ -15,7 +15,13 @@ struct DashboardView: View {
     /// The signal whose history sheet is open, if any.
     @State private var inspecting: SignalID?
 
-    private let secondary: [SignalID] = [.speed, .boost, .coolantTemp, .oilTemp, .throttle, .moduleVoltage]
+    /// Persisted as JSON rather than as a list of names, so a card carries its
+    /// presentation with it and the format can grow without a migration.
+    @AppStorage("dashboardLayout") private var storedLayout = Data()
+
+    @State private var layout = DashboardLayout()
+    @State private var isEditing = false
+    @State private var showSignalPicker = false
 
     var body: some View {
         ZStack {
@@ -33,15 +39,7 @@ struct DashboardView: View {
                 header
                 errorBanner
 
-                if let rpm = session.bus.signal(.rpm) {
-                    TachometerView(signal: rpm, caption: "RPM")
-                        .frame(maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                        .onTapGesture { inspecting = .rpm }
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityHint("Shows recent history")
-                }
-
+                hero
                 tiles
                 footer
             }
@@ -60,6 +58,21 @@ struct DashboardView: View {
                     }
                 }
         )
+        // Long press is the whole entry point: nothing on the driving surface
+        // advertises editing, because a control you can nudge at a glance is a
+        // control you can nudge by accident.
+        .onLongPressGesture(minimumDuration: 0.6) {
+            guard !isEditing else { return }
+            withAnimation(KoboldMotion.ui) { isEditing = true }
+        }
+        .sheet(isPresented: $showSignalPicker) {
+            SignalPickerView(available: pickableSignals) { signal in
+                withAnimation(KoboldMotion.ui) {
+                    layout.add(signal)
+                    persist()
+                }
+            }
+        }
         .sheet(isPresented: $showDiagnostics) { DiagnosticsView() }
         .sheet(item: $inspecting) { id in
             if let signal = session.bus.signal(id) {
@@ -67,6 +80,55 @@ struct DashboardView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .task { loadLayout() }
+    }
+
+    // MARK: - Layout
+
+    /// Signals the vehicle has that are not already on the dashboard.
+    private var pickableSignals: [SignalID] {
+        session.bus.availableSignals
+            .filter { !layout.contains($0) }
+            .sorted { $0.rawValue < $1.rawValue }
+    }
+
+    private func loadLayout() {
+        let available = Set(session.bus.availableSignals)
+
+        // Resolved against the car every time, not just on first load: a layout
+        // outlives the vehicle it was built on, and a card bound to a signal
+        // this profile lacks would sit there as a permanent dash.
+        if let stored = DashboardLayout.decoded(from: storedLayout), !stored.isEmpty {
+            layout = stored.resolved(against: available)
+        } else {
+            layout = DashboardLayout.standard(available: available)
+        }
+    }
+
+    private func persist() {
+        storedLayout = (try? layout.encoded()) ?? Data()
+    }
+
+    private func presentationBinding(for card: DashboardCard) -> Binding<DashboardCard.Presentation> {
+        Binding(
+            get: { layout.cards.first { $0.signal == card.signal }?.presentation ?? card.presentation },
+            set: { layout.setPresentation($0, for: card.signal); persist() }
+        )
+    }
+
+    /// Handles a drop: moves the dragged card so it takes the target's place.
+    private func reorder(dragged: String?, onto target: SignalID) -> Bool {
+        guard let dragged,
+              let from = layout.signals.firstIndex(of: SignalID(dragged)),
+              let to = layout.signals.firstIndex(of: target),
+              from != to
+        else { return false }
+
+        withAnimation(KoboldMotion.ui) {
+            layout.move(from: from, to: to)
+            persist()
+        }
+        return true
     }
 
     /// Maps raw drag distance onto glow intensity using UIKit's own rubber-band
@@ -133,8 +195,22 @@ struct DashboardView: View {
 
             Spacer(minLength: 8)
 
-            statusPill
-            themeButton
+            if isEditing {
+                Button {
+                    withAnimation(KoboldMotion.ui) { isEditing = false }
+                } label: {
+                    Text("Done")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(theme.backgroundBottom)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(theme.accent))
+                }
+                .accessibilityLabel("Finish editing the dashboard")
+            } else {
+                statusPill
+                themeButton
+            }
         }
         .padding(.top, 6)
     }
@@ -238,20 +314,119 @@ struct DashboardView: View {
         .accessibilityLabel("Theme")
     }
 
+    /// The first card, given the room. A gauge only reads at this size, so the
+    /// dial treatment belongs here and nowhere else.
+    @ViewBuilder
+    private var hero: some View {
+        if let card = layout.cards.first, let signal = session.bus.signal(card.signal) {
+            Group {
+                if card.presentation == .gauge {
+                    TachometerView(signal: signal, caption: signal.label.uppercased())
+                } else {
+                    DashboardCardView(card: card, signal: signal, isEditing: isEditing)
+                }
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture { if !isEditing { inspecting = card.signal } }
+            .overlay(alignment: .topTrailing) { editBadges(for: card) }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Shows recent history")
+        } else {
+            ContentUnavailableView("Nothing on the dashboard",
+                                   systemImage: "square.dashed",
+                                   description: Text("Press and hold to choose what to show."))
+                .frame(maxHeight: .infinity)
+        }
+    }
+
     private var tiles: some View {
         LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 104), spacing: 10)],
             spacing: 10
         ) {
-            ForEach(secondary, id: \.rawValue) { id in
-                if let signal = session.bus.signal(id) {
-                    SignalTileView(signal: signal)
+            ForEach(Array(layout.cards.dropFirst()), id: \.id) { card in
+                if let signal = session.bus.signal(card.signal) {
+                    DashboardCardView(card: card, signal: signal, isEditing: isEditing)
                         .contentShape(Rectangle())
-                        .onTapGesture { inspecting = id }
+                        .onTapGesture { if !isEditing { inspecting = card.signal } }
+                        .overlay(alignment: .topTrailing) { editBadges(for: card) }
                         .accessibilityAddTraits(.isButton)
                         .accessibilityHint("Shows recent history")
+                        // String rather than a custom Transferable: the payload
+                        // is one identifier and a bespoke type would be
+                        // ceremony around a value that already round-trips.
+                        .draggable(card.signal.rawValue) {
+                            DashboardCardView(card: card, signal: signal, isEditing: false)
+                                .frame(width: 120)
+                                .opacity(0.9)
+                        }
+                        .dropDestination(for: String.self) { items, _ in
+                            reorder(dragged: items.first, onto: card.signal)
+                        }
                 }
             }
+
+            if isEditing, !layout.isFull {
+                addCardTile
+            }
+        }
+    }
+
+    /// Remove and re-present controls, shown only while editing.
+    @ViewBuilder
+    private func editBadges(for card: DashboardCard) -> some View {
+        if isEditing {
+            HStack(spacing: 6) {
+                Menu {
+                    Picker("Show as", selection: presentationBinding(for: card)) {
+                        ForEach(DashboardCard.Presentation.allCases, id: \.self) { option in
+                            Label(option.label, systemImage: option.symbolName).tag(option)
+                        }
+                    }
+                } label: {
+                    badge(systemName: card.presentation.symbolName, tint: theme.textSecondary)
+                }
+
+                Button {
+                    withAnimation(KoboldMotion.ui) {
+                        layout.remove(card.signal)
+                        persist()
+                    }
+                } label: {
+                    badge(systemName: "minus", tint: theme.danger)
+                }
+                .accessibilityLabel("Remove \(card.signal.rawValue)")
+            }
+            .padding(6)
+        }
+    }
+
+    private func badge(systemName: String, tint: Color) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(tint)
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(theme.surfaceRaised))
+            .overlay(Circle().strokeBorder(theme.hairline, lineWidth: 1))
+    }
+
+    private var addCardTile: some View {
+        Button {
+            showSignalPicker = true
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .semibold))
+                Text("Add")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+            }
+            .foregroundStyle(theme.textSecondary)
+            .frame(maxWidth: .infinity, minHeight: 74)
+            .background(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .strokeBorder(theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+            )
         }
     }
 
@@ -288,86 +463,5 @@ struct DashboardView: View {
         // Nothing measured yet reads as fine rather than alarming.
         guard frameRate.framesPerSecond > 0 else { return true }
         return frameRate.framesPerSecond >= Double(frameRate.maximumFramesPerSecond) * 0.8
-    }
-}
-
-/// A single secondary readout.
-struct SignalTileView: View {
-    @Environment(\.theme) private var theme
-    let signal: LiveSignal
-
-    private var isStale: Bool { signal.isStale() }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(signal.label.uppercased())
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .tracking(0.7)
-                .foregroundStyle(theme.textTertiary)
-                .lineLimit(1)
-
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                // Instant, unanimated, monospaced. See TachometerView.readout:
-                // a numeric morph re-triggered at sample rate is churn, and
-                // monospaced digits already stop the layout shifting.
-                //
-                // A dash rather than a number when nothing has been received:
-                // "0 km/h" and "no reading" are different claims, and only one
-                // of them is true when the adapter has gone.
-                if signal.hasReading {
-                    Text(signal.value, format: .number.precision(.fractionLength(decimals)))
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(valueColour)
-                } else {
-                    Text("—")
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(theme.textTertiary)
-                }
-
-                Text(signal.unit.symbol)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(theme.textTertiary)
-            }
-
-            // A thin bar carries the value's position in range at a glance,
-            // which a bare number cannot.
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(theme.dialTrack)
-                    Capsule()
-                        .fill(signal.isOverRedline ? theme.danger : theme.accent)
-                        .frame(width: max(3, proxy.size.width * signal.normalised))
-                        .animation(KoboldMotion.gauge, value: signal.value)
-                }
-            }
-            .frame(height: 4)
-        }
-        .padding(11)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(theme.surface))
-        .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(theme.hairline, lineWidth: 1)
-        )
-        .opacity(isStale ? 0.45 : 1)
-        .animation(KoboldMotion.ui, value: isStale)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(signal.label)
-        .accessibilityValue(signal.hasReading
-                            ? "\(signal.value.formatted(.number.precision(.fractionLength(decimals)))) \(signal.unit.symbol)"
-                            : "No reading")
-    }
-
-    private var decimals: Int {
-        switch signal.unit {
-        case .volt: return 1
-        default: return 0
-        }
-    }
-
-    private var valueColour: Color {
-        signal.isOverRedline ? theme.danger : theme.textPrimary
     }
 }
