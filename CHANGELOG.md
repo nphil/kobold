@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.10.0
+
+### Features
+
+- add the fuel-system PIDs needed to chase a long-crank fault (`8db9c47`)
+
+### Documentation
+
+- record the signal-catalogue gap and the diagnostics screen [skip ci] (`b6b203a`)
+
+**Full changelog:** `v0.9.0...v0.10.0`
+
 ## v0.9.0
 
 ### Features
