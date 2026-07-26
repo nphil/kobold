@@ -1,0 +1,119 @@
+{
+  "$comment": "Starter PID reference for Kobold. Schema shape adapted from AndrOBD (GPL-3.0 project; schema/ideas only, no code/text copied). Formulas are SAE J1979 standard or forum-sourced and reimplemented from spec. This is REFERENCE DATA to seed the profile engine (docs/03), not a compiled table. Confidence + source noted per extended PID. Values decode from response bytes named A,B,C,... (A = first data byte after the mode/PID echo).",
+  "schemaVersion": 1,
+  "conversions": {
+    "$comment": "Reusable conversion definitions. LINEAR: physical = (raw + offs) * fact / div + phOf.",
+    "temp_offset40": { "type": "LINEAR", "fact": 1, "div": 1, "offs": -40, "unit": "degC" },
+    "percent_255": { "type": "LINEAR", "fact": 100, "div": 255, "unit": "pct" },
+    "fuel_trim": { "type": "LINEAR", "fact": 100, "div": 128, "phOf": -100, "unit": "pct" },
+    "rpm": { "type": "LINEAR", "expr": "(256*A + B) / 4", "unit": "rpm" },
+    "speed_kmh": { "type": "LINEAR", "fact": 1, "div": 1, "unit": "kmh" },
+    "map_kpa": { "type": "LINEAR", "fact": 1, "div": 1, "unit": "kPa" },
+    "baro_kpa": { "type": "LINEAR", "fact": 1, "div": 1, "unit": "kPa" },
+    "timing_advance": { "type": "LINEAR", "expr": "A/2 - 64", "unit": "deg" },
+    "module_voltage": { "type": "LINEAR", "expr": "(256*A + B) / 1000", "unit": "V" },
+    "maf_gps": { "type": "LINEAR", "expr": "(256*A + B) / 100", "unit": "gps" },
+    "oil_temp_hkmc": { "type": "LINEAR", "expr": "A*0.75 - 48", "unit": "degC" },
+    "tpms_psi_hkmc": { "type": "LINEAR", "fact": 1, "div": 5, "unit": "psi" }
+  },
+  "baselines": {
+    "sae-j1979-core": {
+      "$comment": "Inherited by every vehicle profile. Engine ECU header 7E0/7E8. All Mode 01. Reference decoder: python-OBD decoders.py (GPL — reimplement from spec).",
+      "bus": { "protocol": "ISO15765-4-CAN-11bit-500k" },
+      "ecuHeaders": { "engine": { "tx": "7E0", "rx": "7E8" } },
+      "signals": [
+        { "id": "engineLoad", "label": "Engine Load", "header": "7E0", "mode": "01", "pid": "04", "bytes": 1, "conversion": "percent_255" },
+        { "id": "coolantTemp", "label": "Coolant Temp", "header": "7E0", "mode": "01", "pid": "05", "bytes": 1, "conversion": "temp_offset40" },
+        { "id": "shortTrimB1", "label": "Short Fuel Trim B1", "header": "7E0", "mode": "01", "pid": "06", "bytes": 1, "conversion": "fuel_trim" },
+        { "id": "longTrimB1", "label": "Long Fuel Trim B1", "header": "7E0", "mode": "01", "pid": "07", "bytes": 1, "conversion": "fuel_trim" },
+        { "id": "map", "label": "Intake Manifold Pressure", "header": "7E0", "mode": "01", "pid": "0B", "bytes": 1, "conversion": "map_kpa" },
+        { "id": "rpm", "label": "Engine RPM", "header": "7E0", "mode": "01", "pid": "0C", "bytes": 2, "conversion": "rpm", "max": 8000 },
+        { "id": "speed", "label": "Vehicle Speed", "header": "7E0", "mode": "01", "pid": "0D", "bytes": 1, "conversion": "speed_kmh", "max": 280 },
+        { "id": "timingAdvance", "label": "Timing Advance", "header": "7E0", "mode": "01", "pid": "0E", "bytes": 1, "conversion": "timing_advance" },
+        { "id": "intakeTemp", "label": "Intake Air Temp", "header": "7E0", "mode": "01", "pid": "0F", "bytes": 1, "conversion": "temp_offset40" },
+        { "id": "maf", "label": "MAF Rate", "header": "7E0", "mode": "01", "pid": "10", "bytes": 2, "conversion": "maf_gps" },
+        { "id": "throttle", "label": "Throttle Position", "header": "7E0", "mode": "01", "pid": "11", "bytes": 1, "conversion": "percent_255" },
+        { "id": "baro", "label": "Barometric Pressure", "header": "7E0", "mode": "01", "pid": "33", "bytes": 1, "conversion": "baro_kpa" },
+        { "id": "moduleVoltage", "label": "Module Voltage", "header": "7E0", "mode": "01", "pid": "42", "bytes": 2, "conversion": "module_voltage" },
+        { "id": "ambientTemp", "label": "Ambient Air Temp", "header": "7E0", "mode": "01", "pid": "46", "bytes": 1, "conversion": "temp_offset40" }
+      ],
+      "dtcServices": ["03", "07", "0A"],
+      "freezeFrameMode": "02",
+      "vehicleInfoMode": "09"
+    }
+  },
+  "profiles": {
+    "genesis-g70-2020-2.0t-awd": {
+      "$comment": "Profile #1. Theta-II 2.0T (G4KL), shares engine/platform with Kia Stinger 2.0T. Security gateway blocks WRITES only; all reads below work on a plain ELM327. MAP-based engine: boost is DERIVED, not a PID.",
+      "displayName": "Genesis G70 2.0T AWD (2020)",
+      "inherits": "sae-j1979-core",
+      "match": { "userSelectable": true },
+      "ecuHeaders": {
+        "engine": { "tx": "7E0", "rx": "7E8" },
+        "transmission": { "tx": "7E1", "rx": "7E9" },
+        "tpms": { "tx": "7A0" }
+      },
+      "signals": [
+        {
+          "id": "oilTemp", "label": "Engine Oil Temp",
+          "header": "7E0", "mode": "22", "pid": "E001", "bytes": 1,
+          "conversion": "oil_temp_hkmc",
+          "confidence": "medium",
+          "source": "kiastinger.org Stinger ECM PIDs thread",
+          "note": "Standard Mode01 PID 5C does NOT populate on this platform; use this extended PID."
+        },
+        {
+          "id": "tpmsPressure", "label": "TPMS Pressure (per corner)",
+          "header": "7A0", "mode": "22", "pid": "C00B",
+          "conversion": "tpms_psi_hkmc",
+          "byteMap": { "frontLeft": "E/F", "frontRight": "I/J", "rearRight": "M/N", "rearLeft": "Q/R" },
+          "confidence": "medium",
+          "source": "kiastinger.org, cross-ref Kia Kona docs"
+        },
+        {
+          "id": "transFluidTemp", "label": "Transmission Fluid Temp",
+          "header": "7E1", "mode": "21", "pid": "A0",
+          "conversion": { "type": "MODEL_DEPENDENT", "note": "scale varies; validate on-car (some profiles report degF)" },
+          "confidence": "low-medium",
+          "source": "HKMC custom-PID note 07E1 21A0 (Hyundai Forums, OBD2Australia-style)"
+        }
+      ],
+      "derivedSignals": [
+        {
+          "id": "boost", "label": "Boost Pressure",
+          "expr": "max(0, map - baro)", "unit": "kPa",
+          "note": "Convert to psi for display: kPa * 0.145038. Peak ~13 psi reported by owners.",
+          "displayUnits": ["psi", "kPa", "bar"]
+        },
+        {
+          "id": "computedMaf", "label": "Computed Mass Air Flow",
+          "expr": "f(map, rpm, intakeTemp, volumetricEfficiency)",
+          "note": "Speed-density estimate; this engine is MAP-based, PID 10 unreliable. See Optima 2.0T tuner formulas."
+        },
+        {
+          "id": "estPowerCrank", "label": "Estimated Power (crank)",
+          "expr": "physics(map, rpm, computedMaf, lambda)",
+          "note": "Back-computed like the Theta-II tuning community does; a differentiator, mark as ESTIMATE in UI."
+        }
+      ],
+      "knownAbsent": [
+        { "id": "oilTempStandard", "reason": "Mode01 PID 5C does not populate on HKMC platform" },
+        { "id": "knockRetard", "reason": "not in Mode01; no public extended PID for G70/Stinger" },
+        { "id": "cvvtAngle", "reason": "no public PID" },
+        { "id": "injectorPulseWidth", "reason": "no public PID for this generation" },
+        { "id": "gearPosition", "reason": "8-speed under-documented vs older 4/6-speed; no confirmed PID" },
+        { "id": "htracClutchDuty", "reason": "AWD clutch duty/torque split has no public PID; broadcast on CAN, needs raw sniffing" },
+        { "id": "steeringAngle", "reason": "broadcast CAN frame, not an ELM327 query/response PID" },
+        { "id": "brakePressure", "reason": "ABS/ESC broadcast, no documented PID" },
+        { "id": "perWheelSpeed", "reason": "ABS broadcast, no documented PID" }
+      ],
+      "capabilities": {
+        "readStandardPIDs": true,
+        "readExtendedPIDs": true,
+        "readClearDTCs": true,
+        "bidirectionalCoding": false,
+        "codingNote": "Security gateway (2018+) blocks write-class UDS; needs authenticated factory GDS or security-certified Autel/Launch. Out of scope."
+      }
+    }
+  }
+}
