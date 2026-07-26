@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.5.0
+
+### Features
+
+- remote logging over ntfy and a diagnostics screen (`94e77f6`)
+
+### Fixes
+
+- make [skip release] defer one push, not the whole branch (`24d5456`)
+- stop capturing CoreBluetooth objects in log autoclosures (`514f07d`)
+- hoist log arguments out of the escaping autoclosure (`0617405`)
+- run sampling off the main actor and stop the gauges springing [skip release] (`b47734f`)
+
+**Full changelog:** `v0.4.0...v0.5.0`
+
 ## v0.4.0
 
 ### Features
