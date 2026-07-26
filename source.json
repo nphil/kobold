@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.14.1",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.14.1\n\n### Fixes\n\n- union the supported-PID bitmask across every module that answers (`c7af396`)\n\n**Full changelog:** `v0.14.0...v0.14.1`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.14.1/Kobold-0.14.1-unsigned.ipa",
+          "size": 703380,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.14.0",
           "date": "2026-07-26",
           "localizedDescription": "## v0.14.0\n\n### Features\n\n- group the picker by category and make it searchable (`349b509`)\n\n**Full changelog:** `v0.13.0...v0.14.0`",
