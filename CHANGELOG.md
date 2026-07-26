@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.0
+
+### Features
+
+- group the picker by category and make it searchable (`349b509`)
+
+**Full changelog:** `v0.13.0...v0.14.0`
+
 ## v0.13.0
 
 ### Features
