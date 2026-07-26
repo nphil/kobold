@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.10.0",
+          "date": "2026-07-26",
+          "localizedDescription": "## v0.10.0\n\n### Features\n\n- add the fuel-system PIDs needed to chase a long-crank fault (`8db9c47`)\n\n### Documentation\n\n- record the signal-catalogue gap and the diagnostics screen [skip ci] (`b6b203a`)\n\n**Full changelog:** `v0.9.0...v0.10.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.10.0/Kobold-0.10.0-unsigned.ipa",
+          "size": 639517,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.9.0",
           "date": "2026-07-26",
           "localizedDescription": "## v0.9.0\n\n### Features\n\n- live history and per-signal charts (`3b880da`)\n\n**Full changelog:** `v0.8.2...v0.9.0`",
