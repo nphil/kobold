@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.11.0
+
+### Features
+
+- long-press to edit, rearrange, and show cards as graphs (`7780307`)
+
+**Full changelog:** `v0.10.0...v0.11.0`
+
 ## v0.10.0
 
 ### Features
