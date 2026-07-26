@@ -123,14 +123,30 @@ extension EnvironmentValues {
 
 /// The app's motion signature.
 ///
-/// Two distinct registers, kept apart on purpose: chrome moves one way, the
-/// needle another. A needle that eases like a sheet reads as a readout; one
-/// that settles with a little overshoot reads as an instrument.
+/// Three registers, kept apart on purpose, because they answer different
+/// questions.
 enum KoboldMotion {
-    /// Chrome, sheets, state changes.
+    /// Chrome: sheets, menus, state changes. Discrete events, so a spring is
+    /// right — it responds to something that just happened.
     static let ui: Animation = .snappy(duration: 0.28, extraBounce: 0.02)
 
-    /// The needle: quick to respond, settles with a trace of mechanical
-    /// overshoot, bounded so a fast-changing signal never looks nauseating.
-    static let needle: Animation = .spring(response: 0.32, dampingFraction: 0.62)
+    /// Gauges fed by sampled data.
+    ///
+    /// Linear, and exactly as long as the interval between samples. This looks
+    /// wrong on paper and is the only thing that works in practice: a sampled
+    /// signal is not an event, it is a stream, and each value is simply the next
+    /// known position. Interpolating linearly over precisely the gap to the next
+    /// sample produces constant velocity and continuous motion.
+    ///
+    /// A spring here is actively harmful. A bouncy spring takes far longer to
+    /// settle than the gap between samples, so it is re-triggered mid-flight
+    /// over and over and never resolves — which reads as jitter, and gets worse
+    /// the more gauges are moving at once. Easing is nearly as bad: it
+    /// decelerates into every sample, so smooth motion turns into a series of
+    /// visible stop-starts.
+    static let gauge: Animation = .linear(duration: SessionTiming.publishInterval)
+
+    /// Discrete instrument events — crossing a redline, a fault appearing.
+    /// Here the mechanical overshoot belongs, because something did happen.
+    static let alert: Animation = .spring(response: 0.28, dampingFraction: 0.58)
 }

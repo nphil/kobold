@@ -13,6 +13,9 @@ let package = Package(
         // guarded so the target still compiles to an empty module elsewhere,
         // which keeps `swift build` working on Linux CI.
         .library(name: "KoboldBLE", targets: ["KoboldBLE"]),
+        // Diagnostics. Pure Foundation so it can be used from every layer,
+        // including code that also builds on Linux.
+        .library(name: "KoboldLog", targets: ["KoboldLog"]),
     ],
     targets: [
         .target(
@@ -21,7 +24,10 @@ let package = Package(
         ),
         .target(
             name: "KoboldBLE",
-            dependencies: ["KoboldCore"]
+            dependencies: ["KoboldCore", "KoboldLog"]
+        ),
+        .target(
+            name: "KoboldLog"
         ),
         .testTarget(
             name: "KoboldCoreTests",

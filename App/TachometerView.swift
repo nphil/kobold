@@ -67,7 +67,7 @@ struct TachometerView: View {
                         ),
                         style: StrokeStyle(lineWidth: stroke, lineCap: .round)
                     )
-                    .animation(KoboldMotion.needle, value: signal.value)
+                    .animation(KoboldMotion.gauge, value: signal.value)
 
                 // Hub glow: the lit centre from the mark.
                 Circle()
@@ -82,7 +82,7 @@ struct TachometerView: View {
                 NeedleShape()
                     .fill(signal.isOverRedline ? theme.danger : theme.needle)
                     .rotationEffect(.degrees(needleAngle))
-                    .animation(KoboldMotion.needle, value: signal.value)
+                    .animation(KoboldMotion.gauge, value: signal.value)
 
                 hub(side: side)
                 readout(side: side)
@@ -119,16 +119,25 @@ struct TachometerView: View {
         }
     }
 
+    /// The value as shown, quantised to the precision the instrument actually
+    /// claims. A tachometer does not know the engine's speed to the revolution,
+    /// and printing it that way makes the digits churn for no information.
+    private var displayedValue: Double {
+        let step: Double = signal.unit == .rpm ? 10 : 1
+        return (signal.value / step).rounded() * step
+    }
+
     private func readout(side: CGFloat) -> some View {
         VStack(spacing: side * 0.012) {
-            Text(signal.value, format: .number.precision(.fractionLength(0)))
-                // Monospaced digits stop the readout jittering as values change;
-                // proportional figures visibly reflow at speed.
+            // No content transition and no animation here on purpose. A numeric
+            // morph is charming when a value changes occasionally and is noise
+            // when it changes ten times a second — and the morph would be
+            // re-triggered before finishing anyway. Monospaced digits already
+            // hold the layout still, which was the only real problem.
+            Text(displayedValue, format: .number.precision(.fractionLength(0)))
                 .font(.system(size: side * 0.155, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .contentTransition(.numericText())
                 .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
-                .animation(KoboldMotion.ui, value: signal.value)
 
             Text(caption ?? signal.unit.symbol.uppercased())
                 .font(.system(size: side * 0.045, weight: .medium, design: .rounded))

@@ -3,9 +3,14 @@ import KoboldCore
 
 struct DashboardView: View {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(FrameRateMonitor.self) private var frameRate
 
     let session: SessionModel
     @Binding var themeID: String
+
+    /// Signed overscroll pressure, −1…1. Positive means pulling down.
+    @State private var pull: CGFloat = 0
 
     private let secondary: [SignalID] = [.speed, .boost, .coolantTemp, .oilTemp, .throttle, .moduleVoltage]
 
@@ -15,34 +20,77 @@ struct DashboardView: View {
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
 
-            ScrollView {
-                VStack(spacing: 22) {
-                    header
-                    errorBanner
+            // No ScrollView. The dashboard is a panel, not a document: it sizes
+            // to the screen, and the tachometer absorbs whatever space is left
+            // over so everything fits without scrolling on any device.
+            //
+            // Nothing springs. A rubber-band on a panel that cannot move reads
+            // as stutter, especially while every gauge is animating.
+            VStack(spacing: 14) {
+                header
+                errorBanner
 
-                    if let rpm = session.bus.signal(.rpm) {
-                        TachometerView(signal: rpm, caption: "RPM")
-                            .padding(.horizontal, 8)
-                    }
-
-                    tiles
-                    footer
+                if let rpm = session.bus.signal(.rpm) {
+                    TachometerView(signal: rpm, caption: "RPM")
+                        .frame(maxHeight: .infinity)
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 28)
+
+                tiles
+                footer
             }
-            // The dashboard scrolls without chrome. A scroll indicator is
-            // furniture that competes with the instruments for a glance, and it
-            // says nothing a driver needs. Settings and other list-shaped
-            // screens keep the standard indicators, where "how much is left"
-            // is genuinely useful — see docs/06-design-language.md.
-            .scrollIndicators(.hidden)
-            // And it should only scroll when there is something to scroll to:
-            // bouncing content that already fits reads as a list rather than an
-            // instrument panel.
-            .scrollBounceBehavior(.basedOnSize)
+            .padding(.horizontal, 18)
+            .padding(.bottom, 8)
+
+            edgeGlow
         }
+        // Simultaneous so it never swallows taps on the menus and tiles beneath.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in pull = resistance(value.translation.height) }
+                .onEnded { _ in
+                    withAnimation(reduceMotion ? .linear(duration: 0.15) : KoboldMotion.ui) {
+                        pull = 0
+                    }
+                }
+        )
         .preferredColorScheme(.dark)
+    }
+
+    /// Maps raw drag distance onto a saturating curve.
+    ///
+    /// `x / (1 + |x|)` asymptotes to ±1, so pulling harder always gives a little
+    /// more glow but never runs away — the same diminishing-return feel as a
+    /// real rubber band, which is what makes the resistance legible as "there is
+    /// nothing more here" rather than as a broken scroll.
+    private func resistance(_ translation: CGFloat) -> CGFloat {
+        let normalised = Double(translation) / 130
+        return CGFloat(normalised / (1 + abs(normalised)))
+    }
+
+    /// A soft bloom at whichever edge is being pulled away from.
+    ///
+    /// This is the whole answer to "why won't it scroll": the screen replies to
+    /// the gesture instead of ignoring it, without ever moving. Tinted from the
+    /// active theme's accent so it belongs to the current look.
+    private var edgeGlow: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [theme.accent.opacity(0.5), .clear],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 130)
+                .opacity(Double(max(0, pull)))
+
+            Spacer(minLength: 0)
+
+            LinearGradient(colors: [.clear, theme.accent.opacity(0.5)],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 130)
+                .opacity(Double(max(0, -pull)))
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        // Decorative: it says nothing VoiceOver users need, and announcing it
+        // would interrupt the values they are actually there for.
+        .accessibilityHidden(true)
     }
 
     private var header: some View {
@@ -157,8 +205,8 @@ struct DashboardView: View {
 
     private var tiles: some View {
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 148), spacing: 12)],
-            spacing: 12
+            columns: [GridItem(.adaptive(minimum: 104), spacing: 10)],
+            spacing: 10
         ) {
             ForEach(secondary, id: \.rawValue) { id in
                 if let signal = session.bus.signal(id) {
@@ -168,17 +216,39 @@ struct DashboardView: View {
         }
     }
 
+    /// Sample rate and achieved frame rate, side by side.
+    ///
+    /// The frame rate is here rather than buried in a log because "it feels
+    /// slow" is not something to argue about from a desk — the number settles it,
+    /// and it turns amber when the app is missing the display's capability.
     private var footer: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "waveform.path.ecg")
-                .font(.system(size: 11, weight: .semibold))
-            Text(session.samplesPerSecond, format: .number.precision(.fractionLength(0)))
-                .monospacedDigit()
-            Text("samples/s")
+        HStack(spacing: 14) {
+            HStack(spacing: 5) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(session.samplesPerSecond, format: .number.precision(.fractionLength(0)))
+                    .monospacedDigit()
+                Text("val/s")
+            }
+            .foregroundStyle(theme.textTertiary)
+
+            HStack(spacing: 5) {
+                Image(systemName: "gauge.with.needle")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(frameRate.framesPerSecond, format: .number.precision(.fractionLength(0)))
+                    .monospacedDigit()
+                Text("/ \(frameRate.maximumFramesPerSecond) fps")
+            }
+            .foregroundStyle(frameRateHealthy ? theme.textTertiary : theme.caution)
         }
-        .font(.system(size: 12, weight: .medium, design: .rounded))
-        .foregroundStyle(theme.textTertiary)
-        .padding(.top, 2)
+        .font(.system(size: 11, weight: .medium, design: .rounded))
+        .padding(.top, 1)
+    }
+
+    private var frameRateHealthy: Bool {
+        // Nothing measured yet reads as fine rather than alarming.
+        guard frameRate.framesPerSecond > 0 else { return true }
+        return frameRate.framesPerSecond >= Double(frameRate.maximumFramesPerSecond) * 0.8
     }
 }
 
@@ -198,17 +268,18 @@ struct SignalTileView: View {
                 .lineLimit(1)
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
+                // Instant, unanimated, monospaced. See TachometerView.readout:
+                // a numeric morph re-triggered at sample rate is churn, and
+                // monospaced digits already stop the layout shifting.
                 Text(signal.value, format: .number.precision(.fractionLength(decimals)))
-                    .font(.system(size: 27, weight: .semibold, design: .rounded))
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .monospacedDigit()
-                    .contentTransition(.numericText())
                     .foregroundStyle(valueColour)
 
                 Text(signal.unit.symbol)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(theme.textTertiary)
             }
-            .animation(KoboldMotion.ui, value: signal.value)
 
             // A thin bar carries the value's position in range at a glance,
             // which a bare number cannot.
@@ -218,12 +289,12 @@ struct SignalTileView: View {
                     Capsule()
                         .fill(signal.isOverRedline ? theme.danger : theme.accent)
                         .frame(width: max(3, proxy.size.width * signal.normalised))
-                        .animation(KoboldMotion.needle, value: signal.value)
+                        .animation(KoboldMotion.gauge, value: signal.value)
                 }
             }
             .frame(height: 4)
         }
-        .padding(13)
+        .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(theme.surface))
         .overlay(

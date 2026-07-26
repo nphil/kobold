@@ -29,6 +29,8 @@ targets:
         product: KoboldCore
       - package: Kobold
         product: KoboldBLE
+      - package: Kobold
+        product: KoboldLog
     info:
       path: App/Info.plist
       properties:
