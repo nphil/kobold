@@ -117,7 +117,8 @@ final class VehicleCapabilityTests: XCTestCase {
     }
 
     func testGapsGroupByCategory() throws {
-        let capability = VehicleCapability(supported: [0x70, 0x72, 0x3C],
+        // 70/72 are air, 32 is emissions — all still undecoded.
+        let capability = VehicleCapability(supported: [0x70, 0x72, 0x32],
                                            profile: try profile())
         let grouped = capability.gapsByCategory
 

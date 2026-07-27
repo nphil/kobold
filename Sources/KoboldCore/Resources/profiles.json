@@ -12,6 +12,41 @@
       },
       "signals": [
         {
+          "id": "absoluteLoad",
+          "label": "Absolute Load",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "43",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "factor": 100,
+            "divisor": 255
+          },
+          "unit": "pct",
+          "minimum": 0,
+          "maximum": 250,
+          "summary": "Cylinder air mass as a share of maximum. Unlike calculated load this keeps rising with boost, so on a turbo it can exceed 100%.",
+          "category": "engine"
+        },
+        {
+          "id": "actualTorque",
+          "label": "Actual Engine Torque",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "62",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "postOffset": -125
+          },
+          "unit": "pct",
+          "minimum": -125,
+          "maximum": 130,
+          "summary": "Torque the engine is producing, as a percentage of its reference torque.",
+          "category": "engine"
+        },
+        {
           "id": "ambientTemp",
           "label": "Ambient Air Temp",
           "header": "7E0",
@@ -44,6 +79,78 @@
           "category": "air"
         },
         {
+          "id": "catalystTempB1S1",
+          "label": "Catalyst Temp B1S1",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "3C",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "divisor": 10,
+            "postOffset": -40
+          },
+          "unit": "degC",
+          "minimum": -40,
+          "maximum": 1000,
+          "summary": "Catalytic converter temperature before the brick. Runs hot by design — 400-800 °C is normal once lit off.",
+          "category": "emissions"
+        },
+        {
+          "id": "catalystTempB1S2",
+          "label": "Catalyst Temp B1S2",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "3E",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "divisor": 10,
+            "postOffset": -40
+          },
+          "unit": "degC",
+          "minimum": -40,
+          "maximum": 1000,
+          "summary": "Catalyst temperature after the brick. A large rise across the converter means it is working.",
+          "category": "emissions"
+        },
+        {
+          "id": "commandedAFR",
+          "label": "Commanded Lambda",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "44",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "factor": 2,
+            "divisor": 65536
+          },
+          "unit": "none",
+          "minimum": 0,
+          "maximum": 2,
+          "summary": "Air-fuel ratio the ECU is targeting, as a ratio to stoichiometric. 1.00 is stoich; below 1 is rich, which is what it commands under boost to keep temperatures down.",
+          "category": "fuel"
+        },
+        {
+          "id": "commandedThrottle",
+          "label": "Commanded Throttle",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "4C",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 255
+          },
+          "unit": "pct",
+          "minimum": 0,
+          "maximum": 100,
+          "summary": "Throttle opening the ECU is asking for. Compare with actual throttle position to see the actuator keeping up, or not.",
+          "category": "air"
+        },
+        {
           "id": "coolantTemp",
           "label": "Coolant Temp",
           "header": "7E0",
@@ -62,6 +169,36 @@
           "category": "engine"
         },
         {
+          "id": "distanceSinceCleared",
+          "label": "Distance Since Codes Cleared",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "31",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {},
+          "unit": "km",
+          "minimum": 0,
+          "maximum": 65535,
+          "summary": "Distance driven since trouble codes were last cleared. Emissions monitors need a few hundred kilometres to finish.",
+          "category": "emissions"
+        },
+        {
+          "id": "distanceWithMIL",
+          "label": "Distance With Light On",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "21",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {},
+          "unit": "km",
+          "minimum": 0,
+          "maximum": 65535,
+          "summary": "Distance driven since the check-engine light came on. Zero if it has never been on since codes were cleared.",
+          "category": "emissions"
+        },
+        {
           "id": "engineLoad",
           "label": "Engine Load",
           "header": "7E0",
@@ -77,6 +214,23 @@
           "minimum": 0,
           "maximum": 100,
           "summary": "How hard the engine is working, as a percentage of what it could produce at the current speed.",
+          "category": "engine"
+        },
+        {
+          "id": "frictionTorque",
+          "label": "Friction Torque",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "8E",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "postOffset": -125
+          },
+          "unit": "pct",
+          "minimum": -125,
+          "maximum": 130,
+          "summary": "Torque lost to internal friction, as a percentage of reference. Rises when the engine is cold.",
           "category": "engine"
         },
         {
@@ -112,6 +266,23 @@
           "minimum": 0,
           "maximum": 765,
           "summary": "Low-pressure fuel supply, before the high-pressure pump. It reads to 765 kPa and no further, so it clips above that even though the sensor behind it measures to 1,100 kPa. Many direct-injection engines do not report it at all.",
+          "category": "fuel"
+        },
+        {
+          "id": "fuelRailAbsPressure",
+          "label": "Fuel Rail Pressure",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "59",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "factor": 10
+          },
+          "unit": "kPa",
+          "minimum": 0,
+          "maximum": 20000,
+          "summary": "High-pressure fuel rail, measured against vacuum. Warm idle sits near 4,000 kPa and full load reaches 20,000. Watch it after shutdown: a rail that bleeds down while parked is a common cause of long cranking on the next start.",
           "category": "fuel"
         },
         {
@@ -234,6 +405,127 @@
           "category": "electrical"
         },
         {
+          "id": "o2Lambda",
+          "label": "O2 Sensor Lambda",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "34",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "factor": 2,
+            "divisor": 65536
+          },
+          "unit": "none",
+          "minimum": 0,
+          "maximum": 2,
+          "summary": "Measured air-fuel ratio from the wideband sensor. Compare against commanded lambda: a persistent gap is the engine not getting the mixture it asked for.",
+          "category": "fuel"
+        },
+        {
+          "id": "o2Sensor2Voltage",
+          "label": "O2 Sensor 2 Voltage",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "15",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "divisor": 200
+          },
+          "unit": "V",
+          "minimum": 0,
+          "maximum": 1.275,
+          "summary": "Post-catalyst oxygen sensor. Should sit fairly steady once warm, unlike the upstream sensor which swings.",
+          "category": "emissions"
+        },
+        {
+          "id": "odometer",
+          "label": "Odometer",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "A6",
+          "byteOffset": 0,
+          "byteCount": 4,
+          "conversion": {
+            "divisor": 10
+          },
+          "unit": "km",
+          "minimum": 0,
+          "maximum": 1000000,
+          "summary": "Total distance the vehicle has travelled.",
+          "category": "vehicle"
+        },
+        {
+          "id": "pedalD",
+          "label": "Accelerator Pedal D",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "49",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 255
+          },
+          "unit": "pct",
+          "minimum": 0,
+          "maximum": 100,
+          "summary": "Accelerator pedal position from the first of its two sensors — what you asked for, as opposed to what the throttle did.",
+          "category": "air"
+        },
+        {
+          "id": "pedalE",
+          "label": "Accelerator Pedal E",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "4A",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 255
+          },
+          "unit": "pct",
+          "minimum": 0,
+          "maximum": 100,
+          "summary": "Second accelerator pedal sensor, cross-checked against the first.",
+          "category": "air"
+        },
+        {
+          "id": "referenceTorque",
+          "label": "Reference Torque",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "63",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {},
+          "unit": "Nm",
+          "minimum": 0,
+          "maximum": 600,
+          "summary": "Peak torque this engine is rated for. Multiply by actual torque percent for a figure in newton-metres.",
+          "category": "engine"
+        },
+        {
+          "id": "relativeThrottle",
+          "label": "Relative Throttle",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "45",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 255
+          },
+          "unit": "pct",
+          "minimum": 0,
+          "maximum": 100,
+          "summary": "Throttle opening measured from its learned closed position, so it reads zero at rest even as the plate wears.",
+          "category": "air"
+        },
+        {
           "id": "rpm",
           "label": "Engine RPM",
           "header": "7E0",
@@ -265,6 +557,44 @@
           "maximum": 65535,
           "summary": "Time since the engine last started.",
           "category": "engine"
+        },
+        {
+          "id": "secondaryTrimLong",
+          "label": "Long-Term Secondary O2 Trim",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "56",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 128,
+            "postOffset": -100
+          },
+          "unit": "pct",
+          "minimum": -100,
+          "maximum": 99.2,
+          "summary": "Learned fuelling correction from the post-catalyst sensor, carried across drive cycles.",
+          "category": "emissions"
+        },
+        {
+          "id": "secondaryTrimShort",
+          "label": "Short-Term Secondary O2 Trim",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "55",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 128,
+            "postOffset": -100
+          },
+          "unit": "pct",
+          "minimum": -100,
+          "maximum": 99.2,
+          "summary": "Immediate fuelling correction from the post-catalyst sensor.",
+          "category": "emissions"
         },
         {
           "id": "shortTrimB1",
@@ -319,6 +649,39 @@
           "category": "air"
         },
         {
+          "id": "throttleB",
+          "label": "Throttle Position B",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "47",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 255
+          },
+          "unit": "pct",
+          "minimum": 0,
+          "maximum": 100,
+          "summary": "Second throttle position sensor. Drive-by-wire uses two and compares them; a disagreement is a fault.",
+          "category": "air"
+        },
+        {
+          "id": "timeWithMIL",
+          "label": "Time With Light On",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "4D",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {},
+          "unit": "min",
+          "minimum": 0,
+          "maximum": 65535,
+          "summary": "Running time with the check-engine light on.",
+          "category": "emissions"
+        },
+        {
           "id": "timingAdvance",
           "label": "Timing Advance",
           "header": "7E0",
@@ -335,6 +698,21 @@
           "maximum": 63.5,
           "summary": "Ignition timing ahead of top dead centre. The ECU retards it when it detects knock.",
           "category": "engine"
+        },
+        {
+          "id": "warmupsSinceCleared",
+          "label": "Warm-ups Since Codes Cleared",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "30",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {},
+          "unit": "none",
+          "minimum": 0,
+          "maximum": 255,
+          "summary": "Complete warm-up cycles since codes were cleared.",
+          "category": "emissions"
         }
       ],
       "derivedSignals": [],
@@ -412,7 +790,7 @@
           "minimum": 0,
           "maximum": 150,
           "redline": 110,
-          "summary": "Manifold pressure above atmospheric \u2014 what the turbocharger is adding. Worked out from manifold and barometric pressure rather than measured directly.",
+          "summary": "Manifold pressure above atmospheric — what the turbocharger is adding. Worked out from manifold and barometric pressure rather than measured directly.",
           "category": "air"
         }
       ],

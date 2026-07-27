@@ -30,7 +30,7 @@ final class CapabilityReportTests: XCTestCase {
     /// The gap list is the actionable half. It carries the command as well as
     /// the name so it can be looked up without the app in hand.
     func testListsGapsWithTheirCommandGroupedByCategory() throws {
-        let capability = VehicleCapability(supported: [0x0C, 0x70, 0x3C],
+        let capability = VehicleCapability(supported: [0x0C, 0x70, 0x32],
                                            profile: try profile())
         let text = report(capability)
 

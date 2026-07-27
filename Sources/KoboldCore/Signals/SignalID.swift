@@ -69,6 +69,9 @@ public enum Unit: String, Codable, Sendable, CaseIterable {
     case psi
     case liter = "L"
     case second = "s"
+    case newtonMetre = "Nm"
+    case kilometre = "km"
+    case minute = "min"
 
     /// Short suffix for display. Kept here so gauges and exports agree.
     public var symbol: String {
@@ -85,6 +88,9 @@ public enum Unit: String, Codable, Sendable, CaseIterable {
         case .psi: return "psi"
         case .liter: return "L"
         case .second: return "s"
+        case .newtonMetre: return "N⋅m"
+        case .kilometre: return "km"
+        case .minute: return "min"
         }
     }
 }
