@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.18.1
+
+### Performance
+
+- learn how many modules answer each request (`2946fa1`)
+
+**Full changelog:** `v0.18.0...v0.18.1`
+
 ## v0.18.0
 
 ### Features
