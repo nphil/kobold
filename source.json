@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.24.0",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.24.0\n\n### Features\n\n- choose the chart window and the units from one menu (`99643c9`)\n\n### Documentation\n\n- update changelog for v0.23.3 [skip ci] (`9e7d91c`)\n\n**Full changelog:** `v0.23.3...v0.24.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.24.0/Kobold-0.24.0-unsigned.ipa",
+          "size": 917075,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.23.3",
           "date": "2026-07-27",
           "localizedDescription": "## v0.23.3\n\n### Fixes\n\n- count what the diagnostics screen reads as covered (`b6601ac`)\n\n### Documentation\n\n- update changelog for v0.23.2 [skip ci] (`328ac81`)\n\n**Full changelog:** `v0.23.2...v0.23.3`",
