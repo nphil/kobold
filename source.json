@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.18.0",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.18.0\n\n### Features\n\n- write the whole vehicle report to the log, not just the screen (`5b9022f`)\n\n### Build & CI\n\n- gate the release on CI passing instead of racing it (`2826fdc`)\n\n**Full changelog:** `v0.17.0...v0.18.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.18.0/Kobold-0.18.0-unsigned.ipa",
+          "size": 777665,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.17.0",
           "date": "2026-07-27",
           "localizedDescription": "## v0.17.0\n\n### Features\n\n- report which chassis and driver-assistance modules are fitted (`9adf8b9`)\n\n**Full changelog:** `v0.16.0...v0.17.0`",
