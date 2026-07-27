@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.22.1
+
+### Fixes
+
+- stop chasing adverts at the noise floor, and say which phase failed (`ac71cbc`)
+- stop a late reply from shifting every read after it (`ba526a3`)
+
+**Full changelog:** `v0.22.0...v0.22.1`
+
 ## v0.22.0
 
 ### Features
