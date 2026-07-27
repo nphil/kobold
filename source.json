@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.22.1",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.22.1\n\n### Fixes\n\n- stop chasing adverts at the noise floor, and say which phase failed (`ac71cbc`)\n- stop a late reply from shifting every read after it (`ba526a3`)\n\n**Full changelog:** `v0.22.0...v0.22.1`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.22.1/Kobold-0.22.1-unsigned.ipa",
+          "size": 884010,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.22.0",
           "date": "2026-07-27",
           "localizedDescription": "## v0.22.0\n\n### Features\n\n- search modules for undocumented data identifiers (`8da6936`)\n\n### Fixes\n\n- correct two concurrency errors in the scanner, and catch them locally (`669d68c`)\n\n**Full changelog:** `v0.21.0...v0.22.0`",
