@@ -17,6 +17,11 @@ struct SignalDetailView: View {
     @State private var window: Window = .oneMinute
     @State private var points: [SignalHistory.Point] = []
 
+    /// Shared with the dashboard, so a signal reads the same wherever it
+    /// appears. Choosing psi here and still seeing kPa on the tile would be a
+    /// setting that only half applies.
+    @AppStorage("unitPreferences") private var storedUnits = Data()
+
     /// How much history the chart shows.
     ///
     /// A fixed visible window rather than an ever-growing axis: an
@@ -28,6 +33,16 @@ struct SignalDetailView: View {
         case fiveMinutes = "5m"
 
         var id: String { rawValue }
+
+        /// Spelled out, because a menu has room for words where the segmented
+        /// control it replaced had room for two characters.
+        var label: String {
+            switch self {
+            case .thirtySeconds: return "Last 30 seconds"
+            case .oneMinute: return "Last minute"
+            case .fiveMinutes: return "Last 5 minutes"
+            }
+        }
 
         var seconds: TimeInterval {
             switch self {
@@ -58,7 +73,6 @@ struct SignalDetailView: View {
             VStack(spacing: 16) {
                 readout
                 chart
-                windowPicker
                 Spacer(minLength: 0)
             }
             .padding(18)
@@ -74,6 +88,9 @@ struct SignalDetailView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    optionsMenu
+                }
             }
         }
         .preferredColorScheme(.dark)
@@ -85,7 +102,7 @@ struct SignalDetailView: View {
     private var readout: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if signal.hasReading {
-                Text(signal.value, format: .number.precision(.fractionLength(decimals)))
+                Text(displayUnit.format(shown(signal.value)))
                     .font(.system(size: 44, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
@@ -95,7 +112,7 @@ struct SignalDetailView: View {
                     .foregroundStyle(theme.textTertiary)
             }
 
-            Text(signal.unit.symbol)
+            Text(displayUnit.symbol)
                 .font(.system(size: 17, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.textTertiary)
 
@@ -132,7 +149,7 @@ struct SignalDetailView: View {
             Chart(points, id: \.time) { point in
                 AreaMark(
                     x: .value("Time", Date(timeIntervalSinceReferenceDate: point.time)),
-                    y: .value(signal.label, point.value)
+                    y: .value(signal.label, shown(point.value))
                 )
                 .foregroundStyle(
                     LinearGradient(colors: [theme.accent.opacity(0.35), theme.accent.opacity(0.02)],
@@ -141,7 +158,7 @@ struct SignalDetailView: View {
 
                 LineMark(
                     x: .value("Time", Date(timeIntervalSinceReferenceDate: point.time)),
-                    y: .value(signal.label, point.value)
+                    y: .value(signal.label, shown(point.value))
                 )
                 .foregroundStyle(theme.accent)
                 .interpolationMethod(.monotone)
@@ -164,14 +181,58 @@ struct SignalDetailView: View {
         }
     }
 
-    private var windowPicker: some View {
-        Picker("Window", selection: $window) {
-            ForEach(Window.allCases) { option in
-                Text(option.rawValue).tag(option)
+    /// Both choices in one place, off the chart rather than under it.
+    ///
+    /// The segmented control that used to sit at the bottom spent a row of a
+    /// small screen on something changed rarely, and left nowhere to put the
+    /// second choice when one arrived.
+    private var optionsMenu: some View {
+        Menu {
+            Picker("Window", selection: $window) {
+                ForEach(Window.allCases) { option in
+                    Text(option.label).tag(option)
+                }
             }
+
+            if signal.unit.hasAlternatives {
+                Divider()
+                Picker("Units", selection: unitBinding) {
+                    ForEach(signal.unit.alternatives, id: \.self) { unit in
+                        Text(unit.symbol).tag(unit)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "slider.horizontal.3")
         }
-        .pickerStyle(.segmented)
+        .accessibilityLabel("Chart options")
         .onChange(of: window) { _, _ in refresh() }
+    }
+
+    // MARK: - Units
+
+    private var preferences: UnitPreferences { UnitPreferences.decoded(from: storedUnits) }
+
+    /// The unit actually on screen.
+    private var displayUnit: KoboldCore.Unit {
+        preferences.unit(for: signal.id, reported: signal.unit)
+    }
+
+    private var unitBinding: Binding<KoboldCore.Unit> {
+        Binding(
+            get: { displayUnit },
+            set: { unit in
+                var updated = preferences
+                updated.set(unit, for: signal.id, reported: signal.unit)
+                storedUnits = updated.encoded()
+            }
+        )
+    }
+
+    /// A stored value converted for display. Everything drawn goes through
+    /// this, so the readout, the statistics and the chart cannot disagree.
+    private func shown(_ value: Double) -> Double {
+        signal.unit.convert(value, to: displayUnit)
     }
 
     // MARK: - Data
@@ -180,9 +241,9 @@ struct SignalDetailView: View {
     /// happened. A coolant trace against a 0–150 axis is a flat line halfway up
     /// and tells you nothing about the ten degrees it moved.
     private var domain: ClosedRange<Double> {
-        let values = points.map(\.value)
+        let values = points.map { shown($0.value) }
         guard let low = values.min(), let high = values.max() else {
-            return signal.range
+            return signal.unit.convert(signal.range, to: displayUnit)
         }
         guard high > low else {
             // A perfectly flat trace still needs a non-empty domain.
@@ -211,14 +272,7 @@ struct SignalDetailView: View {
         }
     }
 
-    private var decimals: Int {
-        switch signal.unit {
-        case .volt: return 1
-        default: return 0
-        }
-    }
-
     private func format(_ value: Double) -> String {
-        value.formatted(.number.precision(.fractionLength(decimals)))
+        displayUnit.format(shown(value))
     }
 }

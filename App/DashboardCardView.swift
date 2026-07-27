@@ -5,6 +5,10 @@ import KoboldCore
 struct DashboardCardView: View {
     @Environment(\.theme) private var theme
 
+    /// Written by the detail sheet. Read here so a unit chosen there applies
+    /// wherever the signal appears, rather than only on the screen that set it.
+    @AppStorage("unitPreferences") private var storedUnits = Data()
+
     let card: DashboardCard
     let signal: LiveSignal
     let isEditing: Bool
@@ -61,7 +65,7 @@ struct DashboardCardView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(signal.label)
         .accessibilityValue(signal.hasReading
-                            ? "\(signal.value.formatted(.number.precision(.fractionLength(decimals)))) \(signal.unit.symbol)"
+                            ? "\(displayUnit.format(shown(signal.value))) \(displayUnit.symbol)"
                             : "No reading")
     }
 
@@ -78,7 +82,7 @@ struct DashboardCardView: View {
     private var value: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             if signal.hasReading {
-                Text(signal.value, format: .number.precision(.fractionLength(decimals)))
+                Text(displayUnit.format(shown(signal.value)))
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
@@ -89,7 +93,7 @@ struct DashboardCardView: View {
                     .foregroundStyle(theme.textTertiary)
             }
 
-            Text(signal.unit.symbol)
+            Text(displayUnit.symbol)
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.textTertiary)
         }
@@ -126,10 +130,13 @@ struct DashboardCardView: View {
         trace = LTTB.downsample(signal.history.points(since: cutoff), to: 80)
     }
 
-    private var decimals: Int {
-        switch signal.unit {
-        case .volt: return 1
-        default: return 0
-        }
+    /// The unit this signal is shown in, honouring the stored choice.
+    private var displayUnit: KoboldCore.Unit {
+        UnitPreferences.decoded(from: storedUnits)
+            .unit(for: signal.id, reported: signal.unit)
+    }
+
+    private func shown(_ value: Double) -> Double {
+        signal.unit.convert(value, to: displayUnit)
     }
 }

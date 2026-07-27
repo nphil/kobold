@@ -72,6 +72,14 @@ public enum Unit: String, Codable, Sendable, CaseIterable {
     case newtonMetre = "Nm"
     case kilometre = "km"
     case minute = "min"
+    // Alternates, offered where a reading can sensibly be shown more than one
+    // way. Never written into a profile — a profile states the unit the car
+    // reports in, and these are a display choice on top of it.
+    case bar
+    case fahrenheit = "degF"
+    case milesPerHour = "mph"
+    case mile = "mi"
+    case poundFoot = "lbft"
 
     /// Short suffix for display. Kept here so gauges and exports agree.
     public var symbol: String {
@@ -91,6 +99,11 @@ public enum Unit: String, Codable, Sendable, CaseIterable {
         case .newtonMetre: return "N⋅m"
         case .kilometre: return "km"
         case .minute: return "min"
+        case .bar: return "bar"
+        case .fahrenheit: return "°F"
+        case .milesPerHour: return "mph"
+        case .mile: return "mi"
+        case .poundFoot: return "lb⋅ft"
         }
     }
 }
@@ -107,5 +120,90 @@ public struct SignalSample: Sendable, Equatable {
         self.value = value
         self.unit = unit
         self.timestamp = timestamp
+    }
+}
+
+// MARK: - Alternate units
+
+public extension Unit {
+
+    /// Ways this reading can sensibly be shown, the car's own unit first.
+    ///
+    /// Deliberately short. Every entry is a unit somebody actually asks for —
+    /// boost in psi, temperature in Fahrenheit, torque in pound-feet — rather
+    /// than everything a conversion table could offer. A menu of nine pressure
+    /// units is not a feature.
+    var alternatives: [Unit] {
+        switch self {
+        case .kilopascal: return [.kilopascal, .psi, .bar]
+        case .psi: return [.psi, .kilopascal, .bar]
+        case .celsius: return [.celsius, .fahrenheit]
+        case .kilometersPerHour: return [.kilometersPerHour, .milesPerHour]
+        case .kilometre: return [.kilometre, .mile]
+        case .newtonMetre: return [.newtonMetre, .poundFoot]
+        default: return [self]
+        }
+    }
+
+    var hasAlternatives: Bool { alternatives.count > 1 }
+
+    /// Converts a value expressed in this unit into another.
+    ///
+    /// Returns the value unchanged when the two are unrelated, so a stale
+    /// preference — a signal that used to be a pressure and is now a percentage
+    /// — degrades to showing the real number rather than a fabricated one.
+    func convert(_ value: Double, to unit: Unit) -> Double {
+        guard self != unit else { return value }
+
+        switch (self, unit) {
+        case (.kilopascal, .psi): return value * 0.145_037_7
+        case (.kilopascal, .bar): return value / 100
+        case (.psi, .kilopascal): return value / 0.145_037_7
+        case (.psi, .bar): return value * 0.068_947_6
+        case (.bar, .kilopascal): return value * 100
+        case (.bar, .psi): return value / 0.068_947_6
+
+        // The one conversion with an offset, and the one people get wrong.
+        case (.celsius, .fahrenheit): return value * 9 / 5 + 32
+        case (.fahrenheit, .celsius): return (value - 32) * 5 / 9
+
+        case (.kilometersPerHour, .milesPerHour): return value * 0.621_371_2
+        case (.milesPerHour, .kilometersPerHour): return value / 0.621_371_2
+        case (.kilometre, .mile): return value * 0.621_371_2
+        case (.mile, .kilometre): return value / 0.621_371_2
+        case (.newtonMetre, .poundFoot): return value * 0.737_562_1
+        case (.poundFoot, .newtonMetre): return value / 0.737_562_1
+
+        default: return value
+        }
+    }
+
+    /// Converts a range, keeping it ordered.
+    ///
+    /// Ordering matters because Fahrenheit and Celsius share a direction but a
+    /// future unit might not, and an inverted `ClosedRange` is a crash rather
+    /// than a wrong picture.
+    func convert(_ range: ClosedRange<Double>, to unit: Unit) -> ClosedRange<Double> {
+        let a = convert(range.lowerBound, to: unit)
+        let b = convert(range.upperBound, to: unit)
+        return Swift.min(a, b)...Swift.max(a, b)
+    }
+
+    /// Decimal places to show, given the value.
+    ///
+    /// Value-dependent for the unitless case on purpose: lambda is 0.98 and
+    /// wants two, a count of warm-ups is 7 and wants none, and both are `.none`.
+    func fractionDigits(for value: Double) -> Int {
+        switch self {
+        case .volt, .psi: return 1
+        case .bar: return 2
+        case .none: return value == value.rounded() ? 0 : 2
+        default: return 0
+        }
+    }
+
+    /// The value as it should appear, without its symbol.
+    func format(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(fractionDigits(for: value))))
     }
 }

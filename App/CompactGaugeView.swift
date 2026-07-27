@@ -16,6 +16,10 @@ import KoboldCore
 struct CompactGaugeView: View {
     @Environment(\.theme) private var theme
 
+    /// Written by the detail sheet. Read here so a unit chosen there applies
+    /// wherever the signal appears, rather than only on the screen that set it.
+    @AppStorage("unitPreferences") private var storedUnits = Data()
+
     let signal: LiveSignal
 
     private var redlineFraction: Double? {
@@ -78,7 +82,7 @@ struct CompactGaugeView: View {
     private func readout(side: CGFloat) -> some View {
         VStack(spacing: 0) {
             if signal.hasReading {
-                Text(signal.value, format: .number.precision(.fractionLength(decimals)))
+                Text(displayUnit.format(shown(signal.value)))
                     // Sized against the dial rather than fixed, so the value
                     // stays proportionate whatever the grid gives the card.
                     .font(.system(size: side * 0.26, weight: .semibold, design: .rounded))
@@ -92,7 +96,7 @@ struct CompactGaugeView: View {
                     .foregroundStyle(theme.textTertiary)
             }
 
-            Text(signal.unit.symbol)
+            Text(displayUnit.symbol)
                 .font(.system(size: side * 0.11, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.textTertiary)
                 .lineLimit(1)
@@ -101,10 +105,13 @@ struct CompactGaugeView: View {
         .allowsHitTesting(false)
     }
 
-    private var decimals: Int {
-        switch signal.unit {
-        case .volt: return 1
-        default: return 0
-        }
+    /// The unit this signal is shown in, honouring the stored choice.
+    private var displayUnit: KoboldCore.Unit {
+        UnitPreferences.decoded(from: storedUnits)
+            .unit(for: signal.id, reported: signal.unit)
+    }
+
+    private func shown(_ value: Double) -> Double {
+        signal.unit.convert(value, to: displayUnit)
     }
 }
