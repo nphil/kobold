@@ -64,6 +64,21 @@ public final class BLETransport: NSObject, OBDTransport, @unchecked Sendable {
     /// each distinct name is logged once per scan and no more.
     private var namesSeenThisScan: Set<String> = []
 
+    /// Adapters seen this scan but too far away to be worth connecting to.
+    ///
+    /// Kept apart from `namesSeenThisScan` so a failure can say "your adapter
+    /// is there but out of range", which is a different problem with a
+    /// different fix from "your adapter is not there at all".
+    private var weakSightings: Set<String> = []
+
+    /// Below this, a connection attempt hangs rather than fails.
+    ///
+    /// −95 dBm sits in the gap actually observed between adverts that connect
+    /// and adverts that do not. It is a threshold from measurement, not from
+    /// the specification, so it is deliberately generous: −90 would have
+    /// rejected sightings that did connect.
+    static let minimumUsableRSSI = -95
+
     public init(descriptor: AdapterDescriptor = .generic,
                 scanTimeout: TimeInterval = 12) {
         self.descriptor = descriptor
@@ -218,6 +233,31 @@ public final class BLETransport: NSObject, OBDTransport, @unchecked Sendable {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             guard self.pendingConnect != nil else { return }
+
+            // Says which phase ran out, because they have different causes.
+            // This used to blame the scan even when a peripheral had been
+            // matched and the connection was the part that hung.
+            let outOfRange = self.weakSightings.sorted().joined(separator: ", ")
+            if let name = self.adapterNameValue, self.peripheral != nil {
+                Log.warning(.transport, "Timed out after \(Int(self.scanTimeout))s while "
+                            + "connecting to \(name) — it advertised but never completed")
+                self.teardown(state: .failed("Adapter did not respond"))
+                self.finishConnect(.failure(BLEError.connectionFailed(
+                    "\(name) advertised but would not connect. Move closer to the car, "
+                    + "or unplug the adapter and plug it back in.")))
+                return
+            }
+
+            if !outOfRange.isEmpty {
+                Log.warning(.transport, "Timed out after \(Int(self.scanTimeout))s. "
+                            + "\(outOfRange) was in range but too weak to connect")
+                self.teardown(state: .failed("Adapter out of range"))
+                self.finishConnect(.failure(BLEError.connectionFailed(
+                    "\(outOfRange) is nearby but the signal is too weak. "
+                    + "Move closer to the car.")))
+                return
+            }
+
             let seen = self.namesSeenThisScan.sorted().joined(separator: ", ")
             Log.warning(.transport, "Scan timed out after \(Int(self.scanTimeout))s. "
                         + "Devices seen: \(seen.isEmpty ? "none" : seen)")
@@ -231,6 +271,7 @@ public final class BLETransport: NSObject, OBDTransport, @unchecked Sendable {
     private func beginScan(on central: CBCentralManager) {
         guard central.state == .poweredOn else { return }
         namesSeenThisScan.removeAll(keepingCapacity: true)
+        weakSightings.removeAll(keepingCapacity: true)
         let hints = descriptor.nameMatchHints.joined(separator: ", ")
         Log.info(.transport, "Scanning for names matching \(hints)")
         // Service UUIDs vary by adapter model, so filtering by service here
@@ -332,6 +373,23 @@ extension BLETransport: CBCentralManagerDelegate {
             }
             return
         }
+
+        // An advert at the noise floor is not a reachable adapter.
+        //
+        // Every failed connection on the reference car came in at −96 dBm or
+        // weaker and every successful one at −71 or stronger, with nothing in
+        // between. Connecting to one of those hangs until the timeout and then
+        // reports "no adapter found", which sends someone out to check a fuse
+        // when the truth is that they walked away from the car. Recording it as
+        // seen-but-unreachable is both more honest and more useful.
+        guard rssi >= Self.minimumUsableRSSI else {
+            if let name, weakSightings.insert(name).inserted {
+                Log.info(.transport, "Saw \(name) at RSSI \(rssi), too weak to connect "
+                         + "(need \(Self.minimumUsableRSSI) or better) — still looking")
+            }
+            return
+        }
+
         guard self.peripheral == nil else { return }
 
         central.stopScan()
