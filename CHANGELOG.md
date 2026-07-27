@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.24.1
+
+### Fixes
+
+- trust a scan reply only when it echoes the address asked for (`84b6944`)
+
+### Documentation
+
+- update changelog for v0.24.0 [skip ci] (`0c7f252`)
+
+**Full changelog:** `v0.24.0...v0.24.1`
+
 ## v0.24.0
 
 ### Features
