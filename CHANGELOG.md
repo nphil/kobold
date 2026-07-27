@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.19.0
+
+### Features
+
+- decode 22 more signals the reference car reports (`12c60d6`)
+
+**Full changelog:** `v0.18.1...v0.19.0`
+
 ## v0.18.1
 
 ### Performance
