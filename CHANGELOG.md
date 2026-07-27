@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.16.0
+
+### Features
+
+- cover Mode 09 and say what the coverage report cannot see (`0af28f1`)
+
+**Full changelog:** `v0.15.2...v0.16.0`
+
 ## v0.15.2
 
 ### Fixes
