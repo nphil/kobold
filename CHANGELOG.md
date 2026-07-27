@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.24.3
+
+### Fixes
+
+- show the hero gauge in the unit that was chosen for the signal (`349246e`)
+
+### Documentation
+
+- update changelog for v0.24.1 [skip ci] (`0978c14`)
+
+**Full changelog:** `v0.24.2...v0.24.3`
+
 ## v0.24.1
 
 ### Fixes
