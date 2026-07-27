@@ -459,6 +459,81 @@ public actor ELM327Driver {
         return found
     }
 
+    /// Sweeps data identifiers on one module, reporting each result as it lands.
+    ///
+    /// Streaming rather than returning a list, so an hour-long run persists as
+    /// it goes: a dropped Bluetooth connection halfway through should cost the
+    /// remaining addresses, not the ones already covered.
+    ///
+    /// Read-only throughout. Service 21 and 22 request data; neither can
+    /// command anything, which is what makes sweeping unknown addresses
+    /// defensible at all. Nothing here changes the diagnostic session.
+    ///
+    /// - Parameters:
+    ///   - service: `0x21` (one-byte identifiers) or `0x22` (two-byte).
+    ///   - identifiers: addresses to try, in order.
+    ///   - handler: called per result; return `false` to stop the sweep.
+    public func scanIdentifiers(
+        transmit: String,
+        receive: String?,
+        service: UInt8,
+        identifiers: [UInt32],
+        handler: @Sendable (UInt32, ProbeOutcome) async -> Bool
+    ) async {
+        guard !identifiers.isEmpty else { return }
+
+        await acquire()
+        _ = try? await sendLocked("ATSH \(transmit)", retries: 0)
+        if let receive {
+            _ = try? await sendLocked("ATCRA \(receive)", retries: 0)
+        }
+
+        let width = service == 0x21 ? 2 : 4
+        for identifier in identifiers {
+            if Task.isCancelled { break }
+
+            let command = String(format: "%02X%0\(width)X", service, identifier)
+            let outcome: ProbeOutcome
+
+            // A short timeout on purpose. A module that has the identifier
+            // answers promptly; the slow case is the one that is not coming.
+            if let reply = try? await sendLocked(command, timeout: .milliseconds(400), retries: 0),
+               case .data(let lines) = reply,
+               let response = try? ISOTPAssembler.assemble(lines: lines).first {
+                outcome = Self.classify(response, service: service)
+            } else {
+                outcome = .silent
+            }
+
+            if await handler(identifier, outcome) == false { break }
+        }
+
+        _ = try? await sendLocked("ATAR", retries: 0)
+        _ = try? await sendLocked("ATSH 7DF", retries: 0)
+        release()
+    }
+
+    /// Sorts a reply into data, a refusal with its reason, or nothing.
+    ///
+    /// `7F <service> <reason>` is a negative response. Reading it as data would
+    /// turn every refusal into a three-byte "finding" and bury the real ones.
+    static func classify(_ response: ECUResponse, service: UInt8) -> ProbeOutcome {
+        let payload = response.payload
+        guard let first = payload.first else { return .silent }
+
+        if first == 0x7F {
+            guard payload.count >= 3 else { return .silent }
+            return .refused(payload[2])
+        }
+
+        // A positive response is the request service plus 0x40, echoing the
+        // identifier. Anything else is somebody else's traffic.
+        guard first == service &+ 0x40 else { return .silent }
+        let echoWidth = service == 0x21 ? 1 : 2
+        let data = response.data(pidByteCount: echoWidth)
+        return data.isEmpty ? .silent : .data(data)
+    }
+
     /// Pulls a readable identifier out of a `62 F1 00 …` reply.
     ///
     /// Some modules answer with ASCII, others with a binary part number. Text

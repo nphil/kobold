@@ -15,6 +15,7 @@ struct VehicleDiagnosticsView: View {
     let session: SessionModel
     @State private var model = DiagnosticsModel()
     @State private var revealVIN = false
+    @State private var showDeepScan = false
 
     var body: some View {
         NavigationStack {
@@ -45,6 +46,7 @@ struct VehicleDiagnosticsView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showDeepScan) { DeepScanView(session: session) }
     }
 
     // MARK: - States
@@ -270,10 +272,16 @@ struct VehicleDiagnosticsView: View {
                     }
                     .padding(.vertical, 2)
                 }
+
+                Button {
+                    showDeepScan = true
+                } label: {
+                    Label("Search for undocumented data", systemImage: "magnifyingglass")
+                }
             } header: {
                 sectionHeader("Modules", symbol: "cpu")
             } footer: {
-                Text("Driver-assistance and chassis modules that answered a direct request, with their firmware. Presence and version is all these publish — there is no documented request for what the radar or camera is currently seeing.")
+                Text("Driver-assistance and chassis modules that answered a direct request, with their firmware. Presence and version is all that is published for these — but the factory tool reads live data from them over this same port, so the addresses exist and are simply undocumented. The search looks for them.")
             }
         }
     }
