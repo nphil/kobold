@@ -296,22 +296,96 @@ public actor ELM327Driver {
 
     /// Requests one signal and decodes it.
     public func read(_ definition: SignalDefinition) async throws -> Double {
-        let reply = try await send(definition.command, retries: 1)
+        let command = definition.command
+        let expected = expectedResponseHeader(for: definition.header)
+        let hint = responseCountHint(for: command, expecting: expected)
+
+        let reply = try await send(hint.map { command + String($0) } ?? command, retries: 1)
         guard case .data(let lines) = reply else {
-            throw ELM327Error.deviceError(command: definition.command, reply: reply)
+            if hint != nil { forgetResponseCount(for: command, reason: "no data") }
+            throw ELM327Error.deviceError(command: command, reply: reply)
         }
         let responses = try ISOTPAssembler.assemble(lines: lines)
 
         // With headers on, prefer the ECU this signal expects; a functional
         // request can draw replies from several modules.
-        let expected = expectedResponseHeader(for: definition.header)
-        let response = responses.first { $0.header == expected } ?? responses.first
+        let match = responses.first { $0.header == expected }
 
-        guard let response else {
+        // Cutting the wait short must never change *which* module is believed.
+        // If the reply we optimised for is not the one that came back, the hint
+        // was wrong for this command — drop it and let the next pass hear
+        // everyone out again.
+        if hint != nil, expected != nil, match == nil {
+            forgetResponseCount(for: command, reason: "wrong responder")
+        } else if hint == nil {
+            learnResponseCount(for: command, lines: lines, responses: responses)
+        }
+
+        guard let response = match ?? responses.first else {
             throw ELM327Error.malformedResponse(lines.joined(separator: " | "))
         }
         return try PIDDecoder.decode(response, using: definition)
     }
+
+    // MARK: - Response-count hints
+
+    /// How many replies each command has actually produced, once observed.
+    ///
+    /// An ELM327 with no idea how many modules will answer has to wait out its
+    /// full timeout on every request, in case another reply is still coming.
+    /// Telling it the count lets it return the moment they have all arrived —
+    /// the datasheet's own example is "10 to 12 responses per second instead of
+    /// the 6 obtained previously".
+    ///
+    /// Learned rather than assumed. Hard-coding "expect 1" would be faster
+    /// immediately and wrong on any PID two modules answer: the adapter would
+    /// return the first reply, which is not necessarily the one addressed, and
+    /// a speed win that quietly attributes the transmission's data to the
+    /// engine is worse than being slow.
+    private var learnedResponseCounts: [String: Int] = [:]
+
+    /// Set when the adapter appears not to honour the count digit at all.
+    private var responseCountsDisabled = false
+    private var responseCountFailures = 0
+
+    private func responseCountHint(for command: String, expecting expected: String?) -> Int? {
+        // Without a known response header there is no way to tell a correct
+        // early return from a wrong one, so those commands are left alone.
+        guard !responseCountsDisabled, expected != nil else { return nil }
+        return learnedResponseCounts[command]
+    }
+
+    private func learnResponseCount(for command: String,
+                                    lines: [String],
+                                    responses: [ECUResponse]) {
+        guard !responseCountsDisabled, !responses.isEmpty, responses.count < 16 else { return }
+
+        // Only single-frame replies. The digit's meaning for a multi-frame
+        // reply — frames, or complete messages? — is not documented anywhere
+        // this was sourced from, and guessing wrong on the one signal that
+        // needs reassembly is not worth a few milliseconds.
+        guard lines.count == responses.count else { return }
+
+        learnedResponseCounts[command] = responses.count
+    }
+
+    private func forgetResponseCount(for command: String, reason: String) {
+        guard learnedResponseCounts.removeValue(forKey: command) != nil else { return }
+
+        responseCountFailures += 1
+        // A handful of these means the adapter does not implement the digit —
+        // clones vary — so stop trying rather than paying a failed read per
+        // signal per pass forever.
+        if responseCountFailures >= 3 {
+            responseCountsDisabled = true
+            learnedResponseCounts.removeAll()
+        }
+    }
+
+    /// Commands currently being asked with a response-count hint, for logging
+    /// and tests. Empty until the first pass has been heard out in full.
+    public var responseCountHints: [String: Int] { learnedResponseCounts }
+    public var usesResponseCounts: Bool { !responseCountsDisabled }
 
     /// A module that answered a diagnostic request, and what it said it is.
     public struct ModuleIdentity: Sendable, Equatable, Identifiable {
@@ -533,11 +607,21 @@ public actor ELM327Driver {
     }
 
     /// Maps a request header to the response header the ECU replies on.
-    /// On 11-bit CAN the convention is request `7E0`–`7E7` → response `7E8`–`7EF`.
+    ///
+    /// On 11-bit CAN the reply arrives at request + 8 — `7E0`→`7E8` for the
+    /// engine, and equally `7A0`→`7A8` for tyre pressures or `7D0`→`7D8` for the
+    /// radar. This used to answer only for `7E0`–`7E7`, which meant a reply from
+    /// any other module had no expected header and fell back to whichever ECU
+    /// happened to answer first.
+    ///
+    /// `7DF` is excluded deliberately: it is the functional broadcast address,
+    /// not a module, and nothing replies from `7E7`.
     private func expectedResponseHeader(for requestHeader: String) -> String? {
         guard requestHeader.count == 3,
-              let value = UInt16(requestHeader, radix: 16) else { return nil }
-        guard (0x7E0...0x7E7).contains(value) else { return nil }
+              let value = UInt16(requestHeader, radix: 16),
+              value != 0x7DF,
+              value + 8 <= 0x7FF
+        else { return nil }
         return String(format: "%03X", value + 8)
     }
 

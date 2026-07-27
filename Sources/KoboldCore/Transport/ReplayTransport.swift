@@ -93,8 +93,28 @@ public actor ReplayTransport: OBDTransport {
 
         guard !fixture.isSilent else { return }
 
-        let lines = fixture.responses[command] ?? fixture.fallback ?? ["NO DATA"]
+        let lines = fixture.responses[command]
+            ?? fixture.responses[Self.withoutResponseCount(command)]
+            ?? fixture.fallback
+            ?? ["NO DATA"]
         emit(lines: lines)
+    }
+
+    /// Strips a trailing expected-response-count digit, the way a real adapter
+    /// does before deciding what was actually requested.
+    ///
+    /// An ELM327 reads an odd number of hex digits as "request, then how many
+    /// replies to wait for", so `010C1` and `010C` ask the same question. A
+    /// fixture keyed on the plain command has to answer both, or every signal
+    /// starts failing the moment the driver learns a count — which is a
+    /// property of this stub, not of the car, and would have looked exactly
+    /// like the optimisation being broken.
+    static func withoutResponseCount(_ command: String) -> String {
+        guard command.count % 2 == 1,
+              command.count > 1,
+              command.allSatisfy(\.isHexDigit)
+        else { return command }
+        return String(command.dropLast())
     }
 
     /// Writes a response followed by the `>` prompt, deliberately fragmented so

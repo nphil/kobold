@@ -51,6 +51,17 @@ Naive one‑PID‑per‑request polling tops out around **7–8 PIDs/sec** becau
 
 Batching + expected‑count + adaptive timing gets a CAN car into the **8–30 PIDs/sec (40–150 "Hz‑PID") range**. Additional levers: turn headers/spaces off (`ATH0`, `ATS0`) once ECU discovery is done to avoid `BUFFER FULL` (the ELM327 has only a 512‑byte TX buffer, and BLE MTU chunking makes verbose formatting expensive); use `ATSH`/`ATCRA` to talk to a single ECU rather than broadcasting.
 
+#### What Kobold implements
+
+**The count digit: yes, learned rather than assumed.** The first read of a command is heard out in full and the number of responders counted; from then on that count is appended. Hard‑coding `1` would be faster immediately and wrong on any PID two modules answer — the adapter returns the first reply, which is not necessarily the addressed one, and a speed win that quietly attributes the transmission's data to the engine is worse than being slow. Two guards follow from that:
+
+- A command is only optimised when its **response header is derivable**, so a wrong early return can be *detected*. When the reply that comes back is not the addressed module's, the hint is dropped and the next pass hears everyone out again.
+- **Multi‑frame replies are never optimised.** Whether the digit counts frames or complete messages is not documented in any source used here, and oil temperature is exactly that case.
+
+An adapter that will not honour the digit fails three reads, and the feature switches itself off for the session — clones vary, and paying a failed read per signal per pass forever is worse than not trying.
+
+**Multi‑PID batching: no, and not soon.** The request form is documented; the reply layout's entire treatment is the phrase "the client walks by byte count", with no worked example. The decoder also cannot consume it as written: `ECUResponse.data(pidByteCount:)` skips one mode byte plus one PID echo and returns *everything to the end* as that signal's data, and `PIDDecoder` locates bytes by absolute offset while validating only the first PID echo. There is **no per‑PID length anywhere in the codebase** — `byteCount` is a value‑slice width, not a PID length, and the two are only coincidentally equal today. Batching needs that table built and verified first.
+
 ### Multi‑frame (ISO‑TP) responses
 
 Long replies (VIN, extended PIDs) span multiple CAN frames. Each line carries a PCI byte (high nibble 1 = First Frame, 2 = Consecutive Frame, low bits = sequence). With `ATCAF1` (default) the ELM327 pre‑parses these as `0:`, `1:`, `2:` prefixes and handles flow control internally, so the client mostly reassembles by discarding mode/PID echo bytes and concatenating. **Known trap:** if multiple ECUs answer the same request, their segment numbers interleave and collide — filter to one ECU with `ATCRA`/`ATSH` before requesting anything multi‑frame.

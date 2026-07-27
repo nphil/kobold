@@ -322,6 +322,9 @@ final class SessionModel {
                                   tick: ((Double) async -> Void)?) async {
         var lastTime = ContinuousClock.now
         var windowStart = ContinuousClock.now
+        // Reported a minute after connecting, by which point the first pass has
+        // been heard out and the hints are in place.
+        var lastRateReport = ContinuousClock.now
         var samplesInWindow = 0
         var consecutiveEmptyPasses = 0
 
@@ -392,6 +395,18 @@ final class SessionModel {
                 Log.debug(.session, "Sampling at \(Int(rate)) values/s")
                 samplesInWindow = 0
                 windowStart = now
+
+                // The rate is the whole point of the response-count work, so it
+                // belongs in the remote log rather than only on screen — but
+                // once a minute, not once a second.
+                if now - lastRateReport > .seconds(60) {
+                    lastRateReport = now
+                    let hints = await driver.responseCountHints
+                    let enabled = await driver.usesResponseCounts
+                    await reportThroughput(hints: hints, enabled: enabled, rate: rate,
+                                           signals: definitions.count,
+                                           generation: generation)
+                }
             }
 
             // Hold the publish cadence: sleep off whatever the pass did not use.
@@ -502,6 +517,33 @@ final class SessionModel {
         guard let capability else { return nil }
         return CapabilityReport.lines(for: capability, profileName: profileName)
             .joined(separator: "\n")
+    }
+
+    /// Puts the sample rate, and why it is what it is, in the log.
+    ///
+    /// Throughput is the one number nobody can reconstruct after the fact, and
+    /// it depends on things that vary per car and per adapter — how many
+    /// signals are on screen, and whether the adapter honours the
+    /// response-count digit. All three go in one line so the answer to "is it
+    /// faster, and did the optimisation take" needs no other evidence.
+    private func reportThroughput(hints: [String: Int],
+                                  enabled: Bool,
+                                  rate: Double,
+                                  signals: Int,
+                                  generation: Int) {
+        guard isCurrent(generation) else { return }
+
+        let perSignal = signals > 0 ? rate / Double(signals) : 0
+        let state: String
+        if !enabled {
+            state = "response-count hints off (adapter would not honour them)"
+        } else if hints.isEmpty {
+            state = "no response-count hints yet"
+        } else {
+            state = "response-count hints on \(hints.count) of \(signals) commands"
+        }
+        Log.info(.session, String(format: "Throughput: %.1f val/s across %d signals "
+                                  + "(%.1f/s each) — %@", rate, signals, perSignal, state))
     }
 
     /// Records the transport a run owns so `stop()` can tear it down.
