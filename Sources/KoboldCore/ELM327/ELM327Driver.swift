@@ -57,6 +57,13 @@ public actor ELM327Driver {
     /// presenting as a spurious timeout.
     private var inbox: [RawResponse] = []
 
+    /// Replies still expected from commands that gave up waiting.
+    ///
+    /// A timed-out command's answer is not cancelled — it is merely late, and
+    /// it will arrive with nobody waiting for it. Counting them is what lets
+    /// the next command tell a stale reply from its own.
+    private var owedReplies = 0
+
     // Async gate serialising command execution.
     private var isBusy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -653,11 +660,26 @@ public actor ELM327Driver {
         let payload = Data((command + descriptor.commandTerminator).utf8)
         let started = ContinuousClock.now
 
-        // Discard anything unsolicited buffered before this command — a late
-        // reply to a previous request must never be paired with this one.
+        // Anything buffered before the write belongs to an earlier command.
         inbox.removeAll()
 
         try await transport.send(payload)
+
+        // Sending suspends this actor, which leaves the whole duration of the
+        // write as a window the clear above cannot cover: a reply to a command
+        // that already timed out arrives, finds no waiter, and is buffered.
+        // `awaitResponse` then hands it back as though it answered *this*
+        // command — and since the real answer arrives later and is buffered in
+        // turn, every subsequent request is served the previous one's reply.
+        // The offset never corrects itself.
+        //
+        // Only replies that are actually owed are dropped. Clearing
+        // unconditionally here would discard the answer on any transport that
+        // can reply within the write itself.
+        while owedReplies > 0, !inbox.isEmpty {
+            inbox.removeFirst()
+            owedReplies -= 1
+        }
 
         do {
             let raw = try await awaitResponse(timeout: timeout ?? timing.current,
@@ -708,6 +730,12 @@ public actor ELM327Driver {
     private func failPending(with error: Error) {
         guard let continuation = pending else { return }
         pending = nil
+
+        // The adapter was not told to stop; its answer is still coming.
+        // Bounded so a long run of failures cannot make the driver discard
+        // good replies indefinitely.
+        if case ELM327Error.timeout = error { owedReplies = min(owedReplies + 1, 4) }
+
         continuation.resume(throwing: error)
     }
 

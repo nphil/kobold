@@ -162,14 +162,30 @@ final class ScanModel {
         let gated = found.filter(\.isGated)
 
         // The conclusion, stated rather than left to be inferred from counts.
-        if !readable.isEmpty {
+        //
+        // Silence first, because a sweep that heard nothing has established
+        // nothing — and saying "this module has no data" on the back of it is
+        // worse than saying nothing at all. It reads as a completed experiment
+        // and ends the investigation on a result that was never collected.
+        let deaf = progress.inconclusive(module: target.key)
+        if !deaf.isEmpty && readable.isEmpty && gated.isEmpty {
+            // Rolled back so the module is not left looking scanned. An
+            // inconclusive run must cost nothing but the time it took.
+            for service in deaf { progress.discard(module: target.key, service: service) }
+
+            lastMessage = "No replies at all — not even a refusal. That is not a finding "
+                + "about the module: nothing was heard from it. Reconnect and try again."
+            Log.warning(.elm327, "Scan of \(target.label) heard nothing back; "
+                        + "discarding the sweep as inconclusive rather than recording it "
+                        + "as a negative result")
+        } else if !readable.isEmpty {
             lastMessage = "\(readable.count) identifiers returned data."
         } else if !gated.isEmpty {
             lastMessage = "Nothing readable, but \(gated.count) refused in a way that means "
                 + "they exist and are locked. A different diagnostic session would be needed."
         } else {
-            lastMessage = "Everything tried reported that it does not exist. "
-                + "This module has no data at those addresses."
+            lastMessage = "Every address refused with \"does not exist\". "
+                + "This module genuinely has no data there."
         }
         Log.info(.elm327, "Scan of \(target.label): \(lastMessage ?? "")")
     }

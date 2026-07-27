@@ -124,6 +124,13 @@ public struct ScanProgress: Sendable, Equatable, Codable {
     public private(set) var tried: [String: Int] = [:]
     /// How many came back "does not exist" — the true negatives.
     public private(set) var absent: [String: Int] = [:]
+    /// How many produced no reply of any kind.
+    ///
+    /// Counted because it is the difference between a module that answered
+    /// every question with "no" and one that was never heard from. A sweep of
+    /// nothing but silence is not evidence of absence, and reporting it as
+    /// such is exactly the false negative this whole design exists to avoid.
+    public private(set) var silent: [String: Int] = [:]
 
     public init() {}
 
@@ -158,7 +165,7 @@ public struct ScanProgress: Sendable, Equatable, Codable {
         case .refused:
             absent[key, default: 0] += 1
         case .silent:
-            break
+            silent[key, default: 0] += 1
         }
     }
 
@@ -172,12 +179,58 @@ public struct ScanProgress: Sendable, Equatable, Codable {
         let data = mine.filter { $0.bytes != nil }.count
         let gated = mine.filter(\.isGated).count
         let absent = absent[key] ?? 0
+        let silent = silent[key] ?? 0
 
         var parts = ["\(tried) tried"]
         if data > 0 { parts.append("\(data) readable") }
         if gated > 0 { parts.append("\(gated) gated") }
-        parts.append("\(absent) absent")
+        if absent > 0 { parts.append("\(absent) absent") }
+        if silent > 0 { parts.append("\(silent) no reply") }
         return parts.joined(separator: ", ")
+    }
+
+    /// Whether a sweep produced no evidence at all.
+    ///
+    /// A module that lacks an identifier says so. Silence means the request
+    /// never arrived, the reply never came back, or the connection is
+    /// desynchronised — none of which is a fact about the module. Distinguished
+    /// so a broken run cannot be mistaken for a completed one, which is the
+    /// mistake that ends an investigation on a result that was never collected.
+    public func heardNothing(module: String, service: UInt8) -> Bool {
+        let key = Self.key(module: module, service: service)
+        let tried = tried[key] ?? 0
+        guard tried > 0 else { return false }
+        return (absent[key] ?? 0) == 0
+            && !findings.contains { $0.module == module && $0.service == service }
+    }
+
+    /// Throws away a sweep that established nothing, so it can be run again.
+    ///
+    /// Without this an inconclusive run is indistinguishable from a completed
+    /// one: the cursor sits at the end of the address space, the module reads
+    /// as fully scanned, and the button that would retry it is disabled. A run
+    /// that heard nothing has to leave no trace, or a transport fault becomes
+    /// a permanent verdict.
+    public mutating func discard(module: String, service: UInt8) {
+        let key = Self.key(module: module, service: service)
+        cursor[key] = 0
+        tried[key] = nil
+        absent[key] = nil
+        silent[key] = nil
+        findings.removeAll { $0.module == module && $0.service == service }
+    }
+
+    /// Modules and services whose sweep produced nothing but silence.
+    public func inconclusive(module: String) -> [UInt8] {
+        Set(tried.keys)
+            .compactMap { key -> UInt8? in
+                let parts = key.split(separator: "/")
+                guard parts.count == 2, String(parts[0]) == module,
+                      let service = UInt8(parts[1], radix: 16),
+                      heardNothing(module: module, service: service) else { return nil }
+                return service
+            }
+            .sorted()
     }
 
     public func findings(module: String) -> [ScanFinding] {

@@ -97,6 +97,65 @@ final class UDSScanTests: XCTestCase {
         XCTAssertEqual(progress.nextIdentifier(module: "fwdRadar", service: 0x21), 0)
     }
 
+    // MARK: - Silence is not absence
+
+    /// The failure that actually happened: a sweep where every probe was
+    /// silent reported itself as "this module has no data at those addresses",
+    /// which is a confident negative drawn from no evidence whatsoever.
+    func testASweepThatHeardNothingIsInconclusiveNotNegative() {
+        var progress = ScanProgress()
+        for identifier in UInt32(0)..<UInt32(500) {
+            progress.record(module: "fwdRadar", service: 0x22,
+                            identifier: identifier, outcome: .silent)
+        }
+
+        XCTAssertTrue(progress.heardNothing(module: "fwdRadar", service: 0x22))
+        XCTAssertEqual(progress.inconclusive(module: "fwdRadar"), [0x22])
+
+        let verdict = progress.verdict(module: "fwdRadar", service: 0x22)
+        XCTAssertTrue(verdict.contains("500 no reply"), verdict)
+        XCTAssertFalse(verdict.contains("absent"), "silence is not absence: \(verdict)")
+    }
+
+    /// One genuine refusal is enough to make a sweep evidence.
+    func testASweepWithRefusalsIsConclusive() {
+        var progress = ScanProgress()
+        progress.record(module: "absEsc", service: 0x22, identifier: 0, outcome: .silent)
+        progress.record(module: "absEsc", service: 0x22, identifier: 1, outcome: .refused(0x31))
+
+        XCTAssertFalse(progress.heardNothing(module: "absEsc", service: 0x22))
+        XCTAssertTrue(progress.inconclusive(module: "absEsc").isEmpty)
+    }
+
+    /// An inconclusive run must leave no trace, or the module reads as fully
+    /// scanned and can never be retried.
+    func testDiscardingAnInconclusiveSweepAllowsItToBeRunAgain() {
+        var progress = ScanProgress()
+        for identifier in UInt32(0)..<UInt32(0x1_0000) {
+            progress.record(module: "fwdRadar", service: 0x22,
+                            identifier: identifier, outcome: .silent)
+        }
+        XCTAssertEqual(progress.nextIdentifier(module: "fwdRadar", service: 0x22), 0x1_0000)
+
+        progress.discard(module: "fwdRadar", service: 0x22)
+
+        XCTAssertEqual(progress.nextIdentifier(module: "fwdRadar", service: 0x22), 0)
+        XCTAssertEqual(progress.triedCount(module: "fwdRadar", service: 0x22), 0)
+        XCTAssertEqual(progress.verdict(module: "fwdRadar", service: 0x22), "not started")
+    }
+
+    /// Discarding one sweep must not touch another module's completed work.
+    func testDiscardingLeavesOtherModulesAlone() {
+        var progress = ScanProgress()
+        progress.record(module: "absEsc", service: 0x22, identifier: 7, outcome: .data([1]))
+        progress.record(module: "fwdRadar", service: 0x22, identifier: 7, outcome: .silent)
+
+        progress.discard(module: "fwdRadar", service: 0x22)
+
+        XCTAssertEqual(progress.findings(module: "absEsc").count, 1)
+        XCTAssertEqual(progress.nextIdentifier(module: "absEsc", service: 0x22), 8)
+    }
+
     // MARK: - Rendering
 
     func testCommandTextMatchesWhatWasSent() {
