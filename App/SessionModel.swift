@@ -106,6 +106,14 @@ final class SessionModel {
     /// nothing could tear down an in-flight scan.
     private var activeTransport: (any OBDTransport)?
 
+    /// The live driver, so on-demand reads can share the one serial line.
+    ///
+    /// The adapter is a single connection: a second consumer opening its own
+    /// would interleave commands with the polling loop. The driver is an actor
+    /// and serialises internally, so sharing it is safe where duplicating it is
+    /// not.
+    private(set) var activeDriver: ELM327Driver?
+
     init() {
         // Degrades rather than refusing to launch: an unknown vehicle still
         // resolves against the standard OBD-II baseline, and a catalogue that
@@ -157,6 +165,7 @@ final class SessionModel {
 
         // Cancelling the task is not enough on its own — CoreBluetooth keeps
         // scanning until someone tells it to stop.
+        activeDriver = nil
         if let transport = activeTransport {
             activeTransport = nil
             Task { await transport.disconnect() }
@@ -291,6 +300,8 @@ final class SessionModel {
             await transport.disconnect()
             return
         }
+
+        await adopt(driver: driver, generation: generation)
 
         let resolved = await driver.negotiatedProtocol
         Self.remember(protocol: resolved, for: name)
@@ -550,6 +561,11 @@ final class SessionModel {
     private func adopt(transport: any OBDTransport, generation: Int) {
         guard isCurrent(generation) else { return }
         activeTransport = transport
+    }
+
+    private func adopt(driver: ELM327Driver, generation: Int) {
+        guard isCurrent(generation) else { return }
+        activeDriver = driver
     }
 
     // MARK: - Helpers

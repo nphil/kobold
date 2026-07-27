@@ -477,8 +477,8 @@ public actor ELM327Driver {
     }
 
     /// Reads stored trouble codes (Mode 03).
-    public func readTroubleCodes() async throws -> [String] {
-        let reply = try await send("03", retries: 1)
+    public func readTroubleCodes(mode: String = "03") async throws -> [String] {
+        let reply = try await send(mode, retries: 1)
         guard case .data(let lines) = reply else { return [] }
 
         let responses = try ISOTPAssembler.assemble(lines: lines)
@@ -488,6 +488,36 @@ public actor ELM327Driver {
             guard !body.isEmpty else { return [] }
             return DTCDecoder.codes(from: Array(body.dropFirst()))
         }
+    }
+
+    /// Reads a Mode 09 text value — VIN, calibration ID, ECU name.
+    ///
+    /// Multi-frame and ASCII, so it shares nothing with the numeric path. The
+    /// reply carries a message count byte before the text on some vehicles and
+    /// not others, so anything outside printable ASCII is dropped rather than
+    /// assumed to be a specific framing.
+    public func readVehicleInfoText(pid: UInt8) async throws -> String? {
+        let command = "09" + String(format: "%02X", pid)
+        guard case .data(let lines) = try await send(command, retries: 1),
+              let response = try ISOTPAssembler.assemble(lines: lines).first
+        else { return nil }
+
+        let payload = response.data(pidByteCount: 1)
+        let printable = payload.filter { $0 >= 0x20 && $0 < 0x7F }
+        let text = String(decoding: printable, as: UTF8.self)
+            .trimmingCharacters(in: .whitespaces)
+        return text.isEmpty ? nil : text
+    }
+
+    /// Reads the raw data bytes of one Mode 01 PID, for values that are flags
+    /// or states rather than numbers.
+    public func readRawPID(_ pid: UInt8) async throws -> [UInt8]? {
+        let command = "01" + String(format: "%02X", pid)
+        guard case .data(let lines) = try await send(command, retries: 1),
+              let response = try ISOTPAssembler.assemble(lines: lines).first
+        else { return nil }
+        let data = response.data(pidByteCount: 1)
+        return data.isEmpty ? nil : data
     }
 
     /// Walks the supported-PID bitmasks (`0100`, `0120`, …) to discover what the

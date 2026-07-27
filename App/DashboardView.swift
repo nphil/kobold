@@ -12,6 +12,7 @@ struct DashboardView: View {
     /// Signed overscroll pressure, −1…1. Positive means pulling down.
     @State private var pull: CGFloat = 0
     @State private var showDiagnostics = false
+    @State private var showVehicleDiagnostics = false
     @State private var showCapability = false
     /// The signal whose history sheet is open, if any.
     @State private var inspecting: SignalID?
@@ -75,6 +76,9 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $showDiagnostics) { DiagnosticsView(session: session) }
+        .sheet(isPresented: $showVehicleDiagnostics) {
+            VehicleDiagnosticsView(session: session)
+        }
         .sheet(isPresented: $showCapability) {
             VehicleCapabilityView(capability: session.capability,
                                   profileName: session.profileName)
@@ -312,7 +316,7 @@ struct DashboardView: View {
     private var themeButton: some View {
         Menu {
             Button {
-                showDiagnostics = true
+                showVehicleDiagnostics = true
             } label: {
                 Label("Diagnostics", systemImage: "stethoscope")
             }
@@ -321,6 +325,12 @@ struct DashboardView: View {
                 showCapability = true
             } label: {
                 Label("Vehicle Coverage", systemImage: "checklist")
+            }
+
+            Button {
+                showDiagnostics = true
+            } label: {
+                Label("App & Logs", systemImage: "gearshape")
             }
 
             Divider()
