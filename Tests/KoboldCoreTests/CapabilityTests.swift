@@ -124,4 +124,32 @@ final class VehicleCapabilityTests: XCTestCase {
         XCTAssertEqual(grouped.first?.category, .air, "air sorts before emissions")
         XCTAssertEqual(Set(grouped.map(\.category)), [.air, .emissions])
     }
+
+    // MARK: - Mode 09
+
+    func testRecordsVehicleInformationSeparately() throws {
+        var capability = VehicleCapability(supported: [0x0C], profile: try profile())
+        XCTAssertTrue(capability.vehicleInfo.isEmpty)
+
+        // A typical reply: VIN, calibration ID, CVN, in-use tracking, ECU name,
+        // plus the message-count PIDs that precede each of them.
+        capability.recordVehicleInfo(reportedPIDs: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x0A])
+
+        XCTAssertEqual(capability.vehicleInfo.map(\.pid), [0x02, 0x04, 0x06, 0x0A])
+        XCTAssertEqual(capability.vehicleInfo.first?.name, "Vehicle Identification Number")
+        XCTAssertEqual(capability.vehicleInfo.first?.command, "0902")
+    }
+
+    /// Mode 09 is identity data, not sensor readings. Letting it into the
+    /// fraction would make one number answer two unrelated questions.
+    func testVehicleInformationDoesNotChangeCoverage() throws {
+        var capability = VehicleCapability(supported: [0x0C, 0x70], profile: try profile())
+        let before = capability.coverage
+        let count = capability.supportedCount
+
+        capability.recordVehicleInfo(reportedPIDs: [0x02, 0x04, 0x06])
+
+        XCTAssertEqual(capability.coverage, before)
+        XCTAssertEqual(capability.supportedCount, count)
+    }
 }

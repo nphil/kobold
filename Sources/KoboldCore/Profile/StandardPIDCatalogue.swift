@@ -140,10 +140,10 @@ public enum StandardPIDCatalogue {
         add(0x66, "Mass Air Flow Sensor", .air)
         add(0x67, "Engine Coolant Temperature Sensors", .engine)
         add(0x68, "Intake Air Temperature Sensors", .air)
-        add(0x69, "Commanded EGR and EGR Error", .emissions)
-        add(0x6A, "Commanded Intake Air Flow Control", .air)
+        add(0x69, "Actual EGR, Commanded EGR and EGR Error", .emissions)
+        add(0x6A, "Commanded Diesel Intake Air Flow Control", .air)
         add(0x6B, "Exhaust Gas Recirculation Temperature", .emissions)
-        add(0x6C, "Commanded Throttle Actuator Control", .air)
+        add(0x6C, "Commanded Throttle Actuator Control and Relative Position", .air)
         add(0x6D, "Fuel Pressure Control System", .fuel)
         add(0x6E, "Injection Pressure Control System", .fuel)
         add(0x6F, "Turbocharger Compressor Inlet Pressure", .air)
@@ -151,13 +151,15 @@ public enum StandardPIDCatalogue {
         add(0x71, "Variable Geometry Turbo Control", .air)
         add(0x72, "Wastegate Control", .air)
         add(0x73, "Exhaust Pressure", .emissions)
-        add(0x74, "Turbocharger Speed", .air)
-        add(0x75, "Turbocharger Temperature", .air)
-        add(0x76, "Turbocharger Temperature", .air)
+        add(0x74, "Turbocharger RPM", .air)
+        // Two temperature PIDs, deliberately. The standard defines a pair of
+        // them with identical names and different sensor sets.
+        add(0x75, "Turbocharger Temperature (A)", .air)
+        add(0x76, "Turbocharger Temperature (B)", .air)
         add(0x77, "Charge Air Cooler Temperature", .air)
         add(0x78, "Exhaust Gas Temperature, Bank 1", .emissions)
         add(0x79, "Exhaust Gas Temperature, Bank 2", .emissions)
-        add(0x7A, "Diesel Particulate Filter", .emissions)
+        add(0x7A, "Diesel Particulate Filter Differential Pressure", .emissions)
         add(0x7B, "Diesel Particulate Filter", .emissions)
         add(0x7C, "Diesel Particulate Filter Temperature", .emissions)
         add(0x7D, "NOx NTE Control Area Status", .emissions)
@@ -165,6 +167,73 @@ public enum StandardPIDCatalogue {
         add(0x7F, "Engine Run Time", .engine)
 
         add(0x80, "Supported PIDs 81–A0", .other)
+        add(0x81, "Run Time for Auxiliary Emissions Control Device", .emissions)
+        add(0x82, "Run Time for Auxiliary Emissions Control Device", .emissions)
+        add(0x83, "NOx Sensor", .emissions)
+        add(0x84, "Manifold Surface Temperature", .air)
+        add(0x85, "NOx Reagent System", .emissions)
+        add(0x86, "Particulate Matter Sensor", .emissions)
+        add(0x87, "Intake Manifold Absolute Pressure (Extended)", .air)
+        add(0x88, "SCR Induce System", .emissions)
+        add(0x89, "Run Time for AECD #11–#15", .emissions)
+        add(0x8A, "Run Time for AECD #16–#20", .emissions)
+        add(0x8B, "Diesel Aftertreatment", .emissions)
+        add(0x8C, "Oxygen Sensor (Wide Range)", .emissions)
+        add(0x8D, "Throttle Position G", .air)
+        add(0x8E, "Engine Friction Percent Torque", .engine)
+        add(0x8F, "Particulate Matter Sensor, Banks 1 and 2", .emissions)
+        add(0x90, "WWH-OBD System Information", .other)
+        add(0x91, "WWH-OBD System Information", .other)
+        add(0x92, "Fuel System Control", .fuel)
+        add(0x93, "WWH-OBD Counter Support", .other)
+        add(0x94, "NOx Warning and Inducement System", .emissions)
+        add(0x98, "Exhaust Gas Temperature Sensor", .emissions)
+        add(0x99, "Exhaust Gas Temperature Sensor", .emissions)
+        add(0x9A, "Hybrid/EV System Data, Battery and Voltage", .electrical)
+        add(0x9B, "Diesel Exhaust Fluid Sensor Data", .emissions)
+        add(0x9C, "Oxygen Sensor Data", .emissions)
+        add(0x9D, "Engine Fuel Rate (Extended)", .fuel)
+        add(0x9E, "Engine Exhaust Flow Rate", .emissions)
+        add(0x9F, "Fuel System Percentage Use", .fuel)
+
+        add(0xA0, "Supported PIDs A1–C0", .other)
+        add(0xA1, "NOx Sensor Corrected Data", .emissions)
+        add(0xA2, "Cylinder Fuel Rate", .fuel)
+        add(0xA3, "Evap System Vapour Pressure (Extended)", .emissions)
+        add(0xA4, "Transmission Actual Gear", .drivetrain)
+        add(0xA5, "Commanded Diesel Exhaust Fluid Dosing", .emissions)
+        add(0xA6, "Odometer", .vehicle)
+        add(0xA7, "NOx Sensor Concentration, Sensors 3 and 4", .emissions)
+        add(0xA8, "NOx Sensor Corrected Concentration, Sensors 3 and 4", .emissions)
+        add(0xA9, "ABS Disable Switch State", .vehicle)
+
+        add(0xC0, "Supported PIDs C1–E0", .other)
         return table
     }()
+}
+
+/// Names for the Mode 09 vehicle-information PIDs.
+///
+/// A second enumerable mode, and the only other one there is. Mode 09 has its
+/// own supported-PID bitmask at `0900` that works exactly like Mode 01's, which
+/// makes it the one remaining thing a coverage report can be honest about
+/// without guessing. Everything else a car exposes lives in manufacturer modes
+/// that no bitmask describes.
+public enum VehicleInfoCatalogue {
+
+    public static func name(for pid: UInt8) -> String? { table[pid] }
+
+    /// PIDs that describe the reply rather than the car: the bank selector, and
+    /// the "how many messages follow" counters that precede each real value.
+    /// Listing them as vehicle information would be listing the envelope.
+    public static let structural: Set<UInt8> = [0x00, 0x01, 0x03, 0x05, 0x07, 0x09, 0x20]
+
+    private static let table: [UInt8: String] = [
+        0x02: "Vehicle Identification Number",
+        0x04: "Calibration ID",
+        0x06: "Calibration Verification Number",
+        0x08: "In-Use Performance Tracking (Spark Ignition)",
+        0x0A: "ECU Name",
+        0x0B: "In-Use Performance Tracking (Compression Ignition)",
+    ]
 }

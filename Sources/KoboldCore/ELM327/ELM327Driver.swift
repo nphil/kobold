@@ -331,12 +331,18 @@ public actor ELM327Driver {
     /// three responses to `0100`. Reading only the first, which this used to do,
     /// silently hid everything the transmission or any other module supports
     /// but the engine ECU does not.
-    public func discoverSupportedPIDs(maximumBanks: Int = 7) async throws -> Set<UInt8> {
+    ///
+    /// `mode` exists because Mode 09 (vehicle information) publishes its own
+    /// bitmask at `0900` in exactly this format. Those two are the whole list:
+    /// manufacturer modes have no equivalent, which is why nothing can
+    /// enumerate them.
+    public func discoverSupportedPIDs(mode: String = "01",
+                                      maximumBanks: Int = 7) async throws -> Set<UInt8> {
         var supported: Set<UInt8> = []
         var base: UInt8 = 0x00
 
         for _ in 0..<maximumBanks {
-            let command = "01" + String(format: "%02X", base)
+            let command = mode + String(format: "%02X", base)
             guard case .data(let lines) = try await send(command, retries: 1) else { break }
 
             let responses = try ISOTPAssembler.assemble(lines: lines)

@@ -30,6 +30,34 @@ public struct VehicleCapability: Sendable, Equatable {
 
     public var supportedCount: Int { readable.count + gaps.count }
 
+    /// Vehicle-information readings the car publishes, from the Mode 09 bitmask.
+    ///
+    /// Reported separately rather than folded into the coverage fraction. Mode
+    /// 09 is identity and calibration data, not sensor readings, and mixing the
+    /// two would make a single number answer two unrelated questions badly.
+    public private(set) var vehicleInfo: [VehicleInfo] = []
+
+    public struct VehicleInfo: Sendable, Equatable, Identifiable {
+        public let pid: UInt8
+        public let name: String
+
+        public var id: UInt8 { pid }
+        public var command: String { "09" + String(format: "%02X", pid) }
+    }
+
+    /// Records what Mode 09 declared. Separate from `init` because it is a
+    /// second round trip that may not happen — an adapter or car that will not
+    /// answer `0900` must leave a capability report that is still valid.
+    public mutating func recordVehicleInfo(reportedPIDs: Set<UInt8>) {
+        vehicleInfo = reportedPIDs
+            .subtracting(VehicleInfoCatalogue.structural)
+            .compactMap { pid in
+                guard let name = VehicleInfoCatalogue.name(for: pid) else { return nil }
+                return VehicleInfo(pid: pid, name: name)
+            }
+            .sorted { $0.pid < $1.pid }
+    }
+
     /// Display names for every signal named in `readable` and `undeclared`.
     ///
     /// Carried here so a report can be rendered from the capability alone. The

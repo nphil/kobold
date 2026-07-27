@@ -86,8 +86,41 @@ struct VehicleCapabilityView: View {
                     Text("Kobold has a decoder for these, but this car did not declare them. Usually a profile written for a different trim.")
                 }
             }
+
+            if !capability.vehicleInfo.isEmpty {
+                Section {
+                    ForEach(capability.vehicleInfo) { info in
+                        gapRow(name: info.name, command: info.command)
+                    }
+                } header: {
+                    sectionHeader("Vehicle Information", symbol: "info.circle")
+                } footer: {
+                    Text("Identity and calibration data this car publishes. Counted separately from the readings above, because a single percentage answering two unrelated questions answers neither. Kobold does not read these yet.")
+                }
+            }
+
+            limitsSection
         }
         .scrollContentBackground(.hidden)
+    }
+
+    /// What this page cannot see.
+    ///
+    /// Without it the headline quietly implies completeness. Only two modes on
+    /// any car publish a list of what they support; everything a manufacturer
+    /// adds beyond that is real, readable with the right request, and invisible
+    /// to every method this screen uses. A coverage report that does not say so
+    /// is overstating itself.
+    private var limitsSection: some View {
+        Section {
+            Text("These counts cover the two modes that publish a list of what they support. Manufacturer-specific readings — the ones behind Engine Oil Temp on this car — are not enumerable: no request asks a car what extended data it has, so nothing here can tell you what else it might expose.")
+                .font(.system(size: 13))
+                .foregroundStyle(theme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .listRowBackground(Color.clear)
+        } header: {
+            sectionHeader("What this cannot see", symbol: "eye.slash")
+        }
     }
 
     // MARK: - Summary
@@ -154,14 +187,18 @@ struct VehicleCapabilityView: View {
     }
 
     private func gapRow(_ gap: VehicleCapability.Gap) -> some View {
+        gapRow(name: gap.name, command: gap.command)
+    }
+
+    private func gapRow(name: String, command: String) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(gap.name)
+                Text(name)
                     .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundStyle(theme.textPrimary)
                 // The raw command, because the person most likely to care about
                 // a gap is the person about to go and look the PID up.
-                Text(gap.command)
+                Text(command)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(theme.textTertiary)
             }
@@ -169,7 +206,7 @@ struct VehicleCapabilityView: View {
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(gap.name), \(gap.command), not decoded yet")
+        .accessibilityLabel("\(name), \(command), not decoded yet")
     }
 
     private func readableRow(_ name: String, muted: Bool = false) -> some View {

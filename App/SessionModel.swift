@@ -469,6 +469,15 @@ final class SessionModel {
         bus.apply(profile: narrowed)
     }
 
+    private func recordVehicleInfo(reportedPIDs: Set<UInt8>, generation: Int) {
+        guard isCurrent(generation), capability != nil else { return }
+        capability?.recordVehicleInfo(reportedPIDs: reportedPIDs)
+
+        let names = capability?.vehicleInfo.map(\.name) ?? []
+        Log.info(.session, "Vehicle information available: "
+                 + (names.isEmpty ? "none" : names.joined(separator: ", ")))
+    }
+
     /// Records the transport a run owns so `stop()` can tear it down.
     private func adopt(transport: any OBDTransport, generation: Int) {
         guard isCurrent(generation) else { return }
@@ -501,6 +510,17 @@ final class SessionModel {
         // Applied on the main actor, where the profile lives — the comparison
         // needs both halves and only one of them is available out here.
         await recordCapability(supported: supported, generation: generation)
+
+        // A second, optional round trip. Mode 09 is the only other enumerable
+        // mode, and a car or adapter that will not answer `0900` must still
+        // leave the Mode 01 report intact — hence a separate try, not a
+        // combined one that would lose both.
+        guard let info = try? await driver.discoverSupportedPIDs(mode: "09",
+                                                                 maximumBanks: 2) else {
+            Log.info(.elm327, "No answer to the Mode 09 bitmask; vehicle information unknown")
+            return
+        }
+        await recordVehicleInfo(reportedPIDs: info, generation: generation)
     }
 
     /// The signals to read this pass.

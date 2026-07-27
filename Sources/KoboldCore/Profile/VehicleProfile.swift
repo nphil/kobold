@@ -271,7 +271,7 @@ public struct ResolvedProfile: Sendable, Equatable {
         let split = SupportedSignals.partition(signals.map { ($0.key, $0.value) },
                                                supported: reported)
 
-        var keptSignals = Dictionary(uniqueKeysWithValues: split.supported)
+        let keptSignals = Dictionary(uniqueKeysWithValues: split.supported)
         var absent = knownAbsent
 
         for id in split.unsupported {
