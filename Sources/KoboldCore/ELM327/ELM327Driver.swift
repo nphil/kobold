@@ -55,14 +55,10 @@ public actor ELM327Driver {
     /// adapter (or a zero-latency replay transport) can answer in between.
     /// Buffering here instead of dropping is what stops that race from
     /// presenting as a spurious timeout.
-    private var inbox: [RawResponse] = []
-
-    /// Replies still expected from commands that gave up waiting.
-    ///
-    /// A timed-out command's answer is not cancelled — it is merely late, and
-    /// it will arrive with nobody waiting for it. Counting them is what lets
-    /// the next command tell a stale reply from its own.
-    private var owedReplies = 0
+    /// Stamped with arrival time, which is what makes a stale reply
+    /// identifiable: anything buffered before a command was written cannot
+    /// possibly be that command's answer.
+    private var inbox: [(response: RawResponse, arrived: ContinuousClock.Instant)] = []
 
     // Async gate serialising command execution.
     private var isBusy = false
@@ -660,26 +656,29 @@ public actor ELM327Driver {
         let payload = Data((command + descriptor.commandTerminator).utf8)
         let started = ContinuousClock.now
 
-        // Anything buffered before the write belongs to an earlier command.
-        inbox.removeAll()
-
+        let writeStarted = ContinuousClock.now
         try await transport.send(payload)
 
-        // Sending suspends this actor, which leaves the whole duration of the
-        // write as a window the clear above cannot cover: a reply to a command
-        // that already timed out arrives, finds no waiter, and is buffered.
-        // `awaitResponse` then hands it back as though it answered *this*
-        // command — and since the real answer arrives later and is buffered in
-        // turn, every subsequent request is served the previous one's reply.
-        // The offset never corrects itself.
+        // Anything that arrived before this command went out belongs to an
+        // earlier one, and cannot be its answer.
         //
-        // Only replies that are actually owed are dropped. Clearing
-        // unconditionally here would discard the answer on any transport that
-        // can reply within the write itself.
-        while owedReplies > 0, !inbox.isEmpty {
-            inbox.removeFirst()
-            owedReplies -= 1
-        }
+        // A timed-out command's reply is not cancelled — it lands later, with
+        // nobody waiting, and is buffered. Handing that to the next command
+        // makes every read return the previous one's value, and because the
+        // real answer is then buffered in turn the offset used to persist for
+        // the life of the connection.
+        //
+        // Timing rather than counting. A count of what is "owed" is wrong
+        // whenever a timeout had no reply coming at all — a mute adapter, an
+        // unplugged one — and would then eat the next good answer instead.
+        // Arrival time needs no such guess.
+        //
+        // A late reply landing *during* this write is still indistinguishable
+        // from this command's own, so it is kept. That costs one wrong pairing
+        // and no more: this command's real answer arrives afterwards, is
+        // buffered, and is discarded on the next write. The desync corrects
+        // itself in one command rather than never.
+        inbox.removeAll { $0.arrived < writeStarted }
 
         do {
             let raw = try await awaitResponse(timeout: timeout ?? timing.current,
@@ -694,7 +693,7 @@ public actor ELM327Driver {
 
     private func awaitResponse(timeout: Duration, command: String) async throws -> RawResponse {
         // The reply may already be here — see `inbox`.
-        if !inbox.isEmpty { return inbox.removeFirst() }
+        if !inbox.isEmpty { return inbox.removeFirst().response }
 
         let timeoutTask = Task { [weak self] in
             try? await Task.sleep(for: timeout)
@@ -720,7 +719,7 @@ public actor ELM327Driver {
             // command and registering its waiter, so buffer rather than drop;
             // `sendRaw` clears the inbox before each write, which is what keeps
             // a genuinely stale reply from being paired with the wrong command.
-            inbox.append(response)
+            inbox.append((response, ContinuousClock.now))
             return
         }
         pending = nil
@@ -730,12 +729,6 @@ public actor ELM327Driver {
     private func failPending(with error: Error) {
         guard let continuation = pending else { return }
         pending = nil
-
-        // The adapter was not told to stop; its answer is still coming.
-        // Bounded so a long run of failures cannot make the driver discard
-        // good replies indefinitely.
-        if case ELM327Error.timeout = error { owedReplies = min(owedReplies + 1, 4) }
-
         continuation.resume(throwing: error)
     }
 

@@ -63,14 +63,33 @@ final class DesyncTests: XCTestCase {
             // Expected.
         }
 
-        // It comes back, and the very next read must be its own answer — not
-        // the one the abandoned command was still owed.
+        // It comes back. Reads must be correct again, and stay correct — the
+        // old failure was not one bad read but every read from then on.
         await transport.update(fixture: fixture())
-        let rpmAfter = try await driver.read(rpm)
-        XCTAssertEqual(rpmAfter, 750, accuracy: 0.01, "rpm must decode as rpm")
+        for _ in 0..<4 {
+            let rpmValue = try await driver.read(rpm)
+            XCTAssertEqual(rpmValue, 750, accuracy: 0.01, "rpm must decode as rpm")
+            let coolantValue = try await driver.read(coolant)
+            XCTAssertEqual(coolantValue, 50, accuracy: 0.01, "0x5A − 40")
+        }
+    }
 
-        let coolantAfter = try await driver.read(coolant)
-        XCTAssertEqual(coolantAfter, 50, accuracy: 0.01, "0x5A − 40")
+    /// A mute adapter produces timeouts with no late reply behind them. An
+    /// earlier fix counted what it thought it was owed and then discarded the
+    /// next genuine answer to settle a debt that did not exist.
+    func testATimeoutWithNoReplyBehindItCostsNothing() async throws {
+        let transport = ReplayTransport(fixture: fixture())
+        let driver = ELM327Driver(transport: transport, descriptor: .generic)
+        try await driver.start()
+
+        await transport.update(fixture: fixture(silent: true))
+        _ = try? await driver.read(rpm)
+
+        // Nothing was ever sent back, so nothing is owed and the very next
+        // read must succeed immediately.
+        await transport.update(fixture: fixture())
+        let value = try await driver.read(rpm)
+        XCTAssertEqual(value, 750, accuracy: 0.01)
     }
 
     /// Several consecutive failures must still leave the session recoverable.
@@ -83,9 +102,6 @@ final class DesyncTests: XCTestCase {
         for _ in 0..<6 { _ = try? await driver.read(rpm) }
 
         await transport.update(fixture: fixture())
-        // Two reads: the first may absorb an owed reply, the second must be
-        // correct regardless.
-        _ = try? await driver.read(rpm)
         let value = try await driver.read(coolant)
         XCTAssertEqual(value, 50, accuracy: 0.01)
     }
