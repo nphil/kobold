@@ -34,6 +34,12 @@ final class ScanModel {
 
     private var task: Task<Void, Never>?
 
+    /// Identifiers covered since the last save. An instance property rather
+    /// than a local: the sweep reports results through a concurrent closure,
+    /// and a captured `var` mutated from there is a data race the compiler
+    /// rightly refuses.
+    private var sinceSave = 0
+
     /// Service 21 is one byte, so 256 addresses — small enough to always finish.
     /// Service 22 is two bytes and is where the long run goes.
     static let services: [(code: UInt8, label: String, count: UInt32)] = [
@@ -88,7 +94,7 @@ final class ScanModel {
                 await self?.sweep(target: target, service: service,
                                   driver: driver, onProgress: onProgress)
             }
-            await self?.finish(target: target)
+            self?.finish(target: target)
         }
     }
 
@@ -101,7 +107,7 @@ final class ScanModel {
         guard start < service.count else { return }
 
         let identifiers = Array(start..<service.count)
-        var sinceSave = 0
+        sinceSave = 0
 
         await driver.scanIdentifiers(
             transmit: target.transmit,
@@ -112,7 +118,7 @@ final class ScanModel {
             guard let self else { return false }
             return await self.absorb(module: target.key, service: service.code,
                                      identifier: identifier, outcome: outcome,
-                                     sinceSave: &sinceSave, onProgress: onProgress)
+                                     onProgress: onProgress)
         }
     }
 
@@ -120,7 +126,6 @@ final class ScanModel {
                         service: UInt8,
                         identifier: UInt32,
                         outcome: ProbeOutcome,
-                        sinceSave: inout Int,
                         onProgress: @MainActor () -> Void) -> Bool {
         progress.record(module: module, service: service,
                         identifier: identifier, outcome: outcome)
