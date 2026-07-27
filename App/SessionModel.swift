@@ -63,6 +63,14 @@ final class SessionModel {
     /// slows down is worse than one that admits it.
     private(set) var samplesPerSecond: Double = 0
 
+    /// What the car declared it supports, from the last capability read.
+    ///
+    /// Kept rather than discarded after filtering: the bitmask is the only
+    /// authoritative answer to "is this app missing anything on my car", and
+    /// throwing it away meant asking the question every connection and never
+    /// showing anyone the answer.
+    private(set) var capability: VehicleCapability?
+
     /// Signals the dashboard wants, in priority order.
     var requested: [SignalID] = [.rpm, .speed, .map, .baro, .coolantTemp, .oilTemp, .throttle, .moduleVoltage]
 
@@ -253,7 +261,8 @@ final class SessionModel {
         // requesting PIDs that will never reply — every pass, forever. The
         // bitmask this reads is already implied by the 0100 reply that
         // negotiated the protocol a moment ago.
-        let active = await Self.supportedSubset(of: definitions, using: driver)
+        let active = await supportedSubset(of: definitions, using: driver,
+                                           generation: generation)
 
         await pump(driver: driver, definitions: active, isDemo: false,
                    generation: generation, tick: nil)
@@ -380,6 +389,15 @@ final class SessionModel {
         samplesPerSecond = rate
     }
 
+    private func recordCapability(supported: Set<UInt8>, generation: Int) {
+        guard isCurrent(generation) else { return }
+        capability = VehicleCapability(supported: supported, profile: profile)
+
+        let readable = capability?.readable.count ?? 0
+        let total = capability?.supportedCount ?? 0
+        Log.info(.session, "Vehicle reports \(total) standard PIDs; Kobold decodes \(readable)")
+    }
+
     /// Records the transport a run owns so `stop()` can tear it down.
     private func adopt(transport: any OBDTransport, generation: Int) {
         guard isCurrent(generation) else { return }
@@ -401,16 +419,23 @@ final class SessionModel {
     /// Degrading rather than failing is deliberate: not answering `0100`-style
     /// queries is a quirk of some clones, and it says nothing about whether the
     /// individual PIDs work. Being unable to ask is not evidence of a "no".
-    private nonisolated static func supportedSubset(
+    private nonisolated func supportedSubset(
         of definitions: [(SignalID, SignalDefinition)],
-        using driver: ELM327Driver
+        using driver: ELM327Driver,
+        generation: Int
     ) async -> [(SignalID, SignalDefinition)] {
 
+        // Recorded before filtering, so the capability screen can report the
+        // gap even when every requested signal happens to be supported.
         guard let supported = try? await driver.discoverSupportedPIDs() else {
             Log.warning(.elm327, "Could not read the supported-PID bitmask; polling all "
                         + "\(definitions.count) requested signals")
             return definitions
         }
+
+        // Recorded on the main actor, where the profile lives — the comparison
+        // needs both halves and only one of them is available out here.
+        await recordCapability(supported: supported, generation: generation)
 
         let split = SupportedSignals.partition(definitions, supported: supported)
 
