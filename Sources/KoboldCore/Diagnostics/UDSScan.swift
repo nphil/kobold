@@ -188,9 +188,16 @@ public struct ScanProgress: Sendable, Equatable, Codable {
         let absent = absent[key] ?? 0
         let silent = silent[key] ?? 0
 
+        // Refusals that are neither "does not exist" nor a lock — most often
+        // "this service is not supported here". They were counted nowhere and
+        // so vanished from the summary, which is how a sweep reported "256
+        // tried" and nothing else and looked like a bug.
+        let other = mine.count - data - gated
+
         var parts = ["\(tried) tried"]
         if data > 0 { parts.append("\(data) readable") }
         if gated > 0 { parts.append("\(gated) gated") }
+        if other > 0 { parts.append("\(other) refused for another reason") }
         if absent > 0 { parts.append("\(absent) absent") }
         if silent > 0 { parts.append("\(silent) no reply") }
         return parts.joined(separator: ", ")

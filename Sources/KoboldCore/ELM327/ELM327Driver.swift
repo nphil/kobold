@@ -75,12 +75,25 @@ public actor ELM327Driver {
     /// search is skipped entirely.
     private let preferredProtocol: String?
 
+    /// Whether to append the expected-response-count digit to requests.
+    ///
+    /// Off by default, on the evidence. The datasheet promises roughly double
+    /// the throughput and the reference adapter delivered none of it: on one
+    /// run it refused the digit outright and the feature disabled itself, and
+    /// on the next it produced a permanently desynced session at 0.1 values per
+    /// second. A measured 2x that is sometimes a total failure is not worth
+    /// having on by default, so it is opt-in until some adapter is shown to
+    /// honour it.
+    private let useResponseCounts: Bool
+
     public init(transport: any OBDTransport,
                 descriptor: AdapterDescriptor = .generic,
-                preferredProtocol: String? = nil) {
+                preferredProtocol: String? = nil,
+                useResponseCounts: Bool = false) {
         self.transport = transport
         self.descriptor = descriptor
         self.preferredProtocol = preferredProtocol
+        self.useResponseCounts = useResponseCounts
         self.timing = AdaptiveTiming(initial: descriptor.initialTimeout)
     }
 
@@ -327,7 +340,20 @@ public actor ELM327Driver {
         guard let response = match ?? responses.first else {
             throw ELM327Error.malformedResponse(lines.joined(separator: " | "))
         }
-        return try PIDDecoder.decode(response, using: definition)
+
+        do {
+            return try PIDDecoder.decode(response, using: definition)
+        } catch {
+            // The header check above is not enough. A desynced pipeline returns
+            // the right *module* answering the wrong *PID* — 7E8 replying about
+            // speed when speed was not what was asked — so the reply passes the
+            // header test, the hint is kept, and the strike system that exists
+            // to switch this off never fires. Observed on the car: every read
+            // failing with pidMismatch, throughput at 0.1 values per second,
+            // and the feature still reporting itself as enabled.
+            if hint != nil { forgetResponseCount(for: command, reason: "wrong PID echoed") }
+            throw error
+        }
     }
 
     // MARK: - Response-count hints
@@ -354,7 +380,7 @@ public actor ELM327Driver {
     private func responseCountHint(for command: String, expecting expected: String?) -> Int? {
         // Without a known response header there is no way to tell a correct
         // early return from a wrong one, so those commands are left alone.
-        guard !responseCountsDisabled, expected != nil else { return nil }
+        guard useResponseCounts, !responseCountsDisabled, expected != nil else { return nil }
         return learnedResponseCounts[command]
     }
 
@@ -388,7 +414,7 @@ public actor ELM327Driver {
     /// Commands currently being asked with a response-count hint, for logging
     /// and tests. Empty until the first pass has been heard out in full.
     public var responseCountHints: [String: Int] { learnedResponseCounts }
-    public var usesResponseCounts: Bool { !responseCountsDisabled }
+    public var usesResponseCounts: Bool { useResponseCounts && !responseCountsDisabled }
 
     /// A module that answered a diagnostic request, and what it said it is.
     public struct ModuleIdentity: Sendable, Equatable, Identifiable {

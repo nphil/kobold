@@ -25,28 +25,75 @@ final class ResponseCountTests: XCTestCase {
         return ReplayTransport.Fixture(responses: responses, fallback: ["NO DATA"])
     }
 
+    /// Opt in explicitly: the feature ships off, because on real hardware it
+    /// delivered none of its promised speed and once destroyed the session.
     private func started(_ fixture: ReplayTransport.Fixture) async throws
         -> (ELM327Driver, ReplayTransport) {
         let transport = ReplayTransport(fixture: fixture)
-        let driver = ELM327Driver(transport: transport, descriptor: .generic)
+        let driver = ELM327Driver(transport: transport, descriptor: .generic,
+                                  useResponseCounts: true)
         try await driver.start()
         return (driver, transport)
     }
 
-    /// The first read is heard out in full; only then is the count known.
-    func testLearnsTheCountFromTheFirstReadAndUsesItAfterwards() async throws {
-        let (driver, transport) = try await started(fixture())
+    /// The default, and the reason for it.
+    ///
+    /// The reference adapter refused the digit on one run and returned a
+    /// permanently desynced session at 0.1 values per second on the next. A
+    /// doubling that is sometimes a total failure is not a default.
+    func testResponseCountsAreOffUnlessAskedFor() async throws {
+        let transport = ReplayTransport(fixture: fixture())
+        let driver = ELM327Driver(transport: transport, descriptor: .generic)
+        try await driver.start()
+
+        for _ in 0..<3 { _ = try await driver.read(rpm) }
+
+        let sent = await transport.sentCommands
+        XCTAssertFalse(sent.contains("010C1"), "no digit unless opted in: \(sent)")
+        let enabled = await driver.usesResponseCounts
+        XCTAssertFalse(enabled)
+    }
+
+    /// The reply that actually broke the car: the right module answering the
+    /// wrong PID. It passes the header check, so the hint used to be kept and
+    /// the strike system that exists to switch this off never fired — every
+    /// read failed while the feature reported itself as working.
+    func testAWrongPIDEchoDropsTheHint() async throws {
+        let transport = ReplayTransport(fixture: fixture())
+        let driver = ELM327Driver(transport: transport, descriptor: .generic,
+                                  useResponseCounts: true)
+        try await driver.start()
 
         _ = try await driver.read(rpm)
-        let afterFirst = await transport.sentCommands.filter { $0.hasPrefix("010C") }
-        XCTAssertEqual(afterFirst, ["010C"], "nothing to hint with yet")
+        var hints = await driver.responseCountHints
+        XCTAssertEqual(hints["010C"], 1, "precondition: the hint was learned")
 
-        _ = try await driver.read(rpm)
-        let afterSecond = await transport.sentCommands.filter { $0.hasPrefix("010C") }
-        XCTAssertEqual(afterSecond, ["010C", "010C1"], "one responder seen, so one expected")
+        // 7E8 answering — the addressed module — but about 0x0D, not the 0x0C
+        // that was asked for. Exactly what a desynced pipeline produces.
+        await transport.update(fixture: fixture(["010C": ["7E8 04 41 0D 00 00"]]))
+        _ = try? await driver.read(rpm)
 
-        let hints = await driver.responseCountHints
-        XCTAssertEqual(hints["010C"], 1)
+        hints = await driver.responseCountHints
+        XCTAssertNil(hints["010C"], "a wrong PID echo must drop the hint")
+    }
+
+    /// Three of those and the feature switches itself off, so a session cannot
+    /// spend its whole life failing every read.
+    func testRepeatedWrongPIDEchoesDisableTheFeature() async throws {
+        let transport = ReplayTransport(fixture: fixture())
+        let driver = ELM327Driver(transport: transport, descriptor: .generic,
+                                  useResponseCounts: true)
+        try await driver.start()
+
+        for _ in 0..<8 {
+            await transport.update(fixture: fixture())
+            _ = try? await driver.read(rpm)
+            await transport.update(fixture: fixture(["010C": ["7E8 04 41 0D 00 00"]]))
+            _ = try? await driver.read(rpm)
+        }
+
+        let enabled = await driver.usesResponseCounts
+        XCTAssertFalse(enabled, "three strikes and it stops trying")
     }
 
     /// Two modules answering means two, not one. Asking for one here would
