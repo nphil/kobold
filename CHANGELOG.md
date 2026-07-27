@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.23.3
+
+### Fixes
+
+- count what the diagnostics screen reads as covered (`b6601ac`)
+
+### Documentation
+
+- update changelog for v0.23.2 [skip ci] (`328ac81`)
+
+**Full changelog:** `v0.23.2...v0.23.3`
+
 ## v0.23.2
 
 ### Fixes
