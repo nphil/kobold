@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.17.0
+
+### Features
+
+- report which chassis and driver-assistance modules are fitted (`9adf8b9`)
+
+**Full changelog:** `v0.16.0...v0.17.0`
+
 ## v0.16.0
 
 ### Features
