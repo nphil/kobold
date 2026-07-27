@@ -102,7 +102,7 @@ struct SignalDetailView: View {
     private var readout: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if signal.hasReading {
-                Text(displayUnit.format(shown(signal.value)))
+                Text(display.format(signal.value))
                     .font(.system(size: 44, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
@@ -112,7 +112,7 @@ struct SignalDetailView: View {
                     .foregroundStyle(theme.textTertiary)
             }
 
-            Text(displayUnit.symbol)
+            Text(display.symbol)
                 .font(.system(size: 17, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.textTertiary)
 
@@ -194,10 +194,10 @@ struct SignalDetailView: View {
                 }
             }
 
-            if signal.unit.hasAlternatives {
+            if display.hasAlternatives {
                 Divider()
                 Picker("Units", selection: unitBinding) {
-                    ForEach(signal.unit.alternatives, id: \.self) { unit in
+                    ForEach(display.alternatives, id: \.self) { unit in
                         Text(unit.symbol).tag(unit)
                     }
                 }
@@ -213,14 +213,16 @@ struct SignalDetailView: View {
 
     private var preferences: UnitPreferences { UnitPreferences.decoded(from: storedUnits) }
 
-    /// The unit actually on screen.
-    private var displayUnit: KoboldCore.Unit {
-        preferences.unit(for: signal.id, reported: signal.unit)
+    /// This signal as the reader asked to see it. Everything drawn goes through
+    /// it, so the readout, the statistics and the chart cannot disagree — and
+    /// it is the same type every other surface uses, so they cannot either.
+    private var display: SignalDisplay {
+        SignalDisplay(reported: signal.unit, id: signal.id, preferences: preferences)
     }
 
     private var unitBinding: Binding<KoboldCore.Unit> {
         Binding(
-            get: { displayUnit },
+            get: { display.unit },
             set: { unit in
                 var updated = preferences
                 updated.set(unit, for: signal.id, reported: signal.unit)
@@ -229,11 +231,7 @@ struct SignalDetailView: View {
         )
     }
 
-    /// A stored value converted for display. Everything drawn goes through
-    /// this, so the readout, the statistics and the chart cannot disagree.
-    private func shown(_ value: Double) -> Double {
-        signal.unit.convert(value, to: displayUnit)
-    }
+    private func shown(_ value: Double) -> Double { display.value(value) }
 
     // MARK: - Data
 
@@ -243,7 +241,7 @@ struct SignalDetailView: View {
     private var domain: ClosedRange<Double> {
         let values = points.map { shown($0.value) }
         guard let low = values.min(), let high = values.max() else {
-            return signal.unit.convert(signal.range, to: displayUnit)
+            return display.range(signal.range)
         }
         guard high > low else {
             // A perfectly flat trace still needs a non-empty domain.
@@ -273,6 +271,6 @@ struct SignalDetailView: View {
     }
 
     private func format(_ value: Double) -> String {
-        displayUnit.format(shown(value))
+        display.format(value)
     }
 }

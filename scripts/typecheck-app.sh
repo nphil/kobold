@@ -26,7 +26,7 @@ MODULES=".build/debug/Modules"
 # Base files every check includes; the rest are added one at a time. The app
 # target is one module, so a file that references SessionModel needs it present.
 BASE=(App/SessionModel.swift App/DemoVehicle.swift)
-EXTRA=(App/ScanModel.swift App/DiagnosticsModel.swift App/UnitPreferences.swift)
+EXTRA=(App/ScanModel.swift App/DiagnosticsModel.swift)
 
 if [[ ! -d "$MODULES" ]]; then
   echo "Building the package first so the modules exist…"

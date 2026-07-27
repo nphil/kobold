@@ -17,8 +17,17 @@ import KoboldCore
 struct TachometerView: View {
     @Environment(\.theme) private var theme
 
+    /// Written by the detail sheet. Read here so a unit chosen there applies to
+    /// the instrument the dashboard is mostly looking at, and not only to the
+    /// small cards below it.
+    @AppStorage("unitPreferences") private var storedUnits = Data()
+
     let signal: LiveSignal
     var caption: String?
+
+    private var display: SignalDisplay {
+        SignalDisplay(reported: signal.unit, id: signal.id, preferences: storedUnits)
+    }
 
     /// Sweep geometry, shared with the icon.
     private let startAngle = KoboldDial.startAngle
@@ -100,8 +109,8 @@ struct TachometerView: View {
 
     private var accessibilityValue: String {
         guard signal.hasReading else { return "No reading" }
-        let value = signal.value.formatted(.number.precision(.fractionLength(0)))
-        let unit = signal.unit.symbol
+        let value = display.format(signal.value)
+        let unit = display.symbol
         let over = signal.isOverRedline ? ", above redline" : ""
         return unit.isEmpty ? "\(value)\(over)" : "\(value) \(unit)\(over)"
     }
@@ -123,9 +132,25 @@ struct TachometerView: View {
     /// The value as shown, quantised to the precision the instrument actually
     /// claims. A tachometer does not know the engine's speed to the revolution,
     /// and printing it that way makes the digits churn for no information.
-    private var displayedValue: Double {
-        let step: Double = signal.unit == .rpm ? 10 : 1
-        return (signal.value / step).rounded() * step
+    ///
+    /// Quantised after conversion, not before, so the steadiness is a property
+    /// of the digits on screen rather than of whichever unit the car happens to
+    /// report in. A unit that earns decimals keeps them — rounding boost in psi
+    /// to whole numbers would throw away most of what it resolves.
+    private var displayedValue: String {
+        let converted = display.value(signal.value)
+        guard display.unit.fractionDigits(for: converted) == 0 else {
+            return display.unit.format(converted)
+        }
+        let step: Double = display.unit == .rpm ? 10 : 1
+        return display.unit.format((converted / step).rounded() * step)
+    }
+
+    /// The line under the number: the signal's name, and the unit it is being
+    /// read in. "112" is a different fact in km/h than in mph, and the dial has
+    /// nowhere else to say which.
+    private var captionText: String {
+        display.caption(for: caption ?? "")
     }
 
     private func readout(side: CGFloat) -> some View {
@@ -139,7 +164,7 @@ struct TachometerView: View {
             // the same time, so the instrument reads as "no signal" rather than
             // as a genuine zero.
             if signal.hasReading {
-                Text(displayedValue, format: .number.precision(.fractionLength(0)))
+                Text(displayedValue)
                     .font(.system(size: side * 0.155, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
@@ -150,10 +175,12 @@ struct TachometerView: View {
                     .foregroundStyle(theme.textTertiary)
             }
 
-            Text(caption ?? signal.unit.symbol.uppercased())
+            Text(captionText)
                 .font(.system(size: side * 0.045, weight: .medium, design: .rounded))
                 .tracking(side * 0.006)
                 .foregroundStyle(theme.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
         .offset(y: side * 0.20)
         .allowsHitTesting(false)

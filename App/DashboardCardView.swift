@@ -65,7 +65,7 @@ struct DashboardCardView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(signal.label)
         .accessibilityValue(signal.hasReading
-                            ? "\(displayUnit.format(shown(signal.value))) \(displayUnit.symbol)"
+                            ? "\(display.format(signal.value)) \(display.symbol)"
                             : "No reading")
     }
 
@@ -82,7 +82,7 @@ struct DashboardCardView: View {
     private var value: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             if signal.hasReading {
-                Text(displayUnit.format(shown(signal.value)))
+                Text(display.format(signal.value))
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
@@ -93,7 +93,7 @@ struct DashboardCardView: View {
                     .foregroundStyle(theme.textTertiary)
             }
 
-            Text(displayUnit.symbol)
+            Text(display.symbol)
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.textTertiary)
         }
@@ -130,13 +130,8 @@ struct DashboardCardView: View {
         trace = LTTB.downsample(signal.history.points(since: cutoff), to: 80)
     }
 
-    /// The unit this signal is shown in, honouring the stored choice.
-    private var displayUnit: KoboldCore.Unit {
-        UnitPreferences.decoded(from: storedUnits)
-            .unit(for: signal.id, reported: signal.unit)
-    }
-
-    private func shown(_ value: Double) -> Double {
-        signal.unit.convert(value, to: displayUnit)
+    /// This signal as the reader asked to see it.
+    private var display: SignalDisplay {
+        SignalDisplay(reported: signal.unit, id: signal.id, preferences: storedUnits)
     }
 }

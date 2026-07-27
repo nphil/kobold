@@ -20,6 +20,11 @@ struct SignalPickerView: View {
     let available: [LiveSignal]
     let onSelect: (SignalID) -> Void
 
+    /// Read so the unit beside each row is the one it would be added in. A
+    /// picker offering "km/h" for a signal the dashboard shows in mph is a
+    /// small lie about what the choice does.
+    @AppStorage("unitPreferences") private var storedUnits = Data()
+
     @State private var query = ""
 
     var body: some View {
@@ -95,7 +100,8 @@ struct SignalPickerView: View {
 
                 Spacer(minLength: 0)
 
-                Text(signal.unit.symbol)
+                Text(SignalDisplay(reported: signal.unit, id: signal.id,
+                                   preferences: storedUnits).symbol)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(theme.textTertiary)
