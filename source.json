@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.23.3",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.23.3\n\n### Fixes\n\n- count what the diagnostics screen reads as covered (`b6601ac`)\n\n### Documentation\n\n- update changelog for v0.23.2 [skip ci] (`328ac81`)\n\n**Full changelog:** `v0.23.2...v0.23.3`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.23.3/Kobold-0.23.3-unsigned.ipa",
+          "size": 905843,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.23.2",
           "date": "2026-07-27",
           "localizedDescription": "## v0.23.2\n\n### Fixes\n\n- stop appending the response-count digit by default (`84d7886`)\n\n### Build & CI\n\n- publish nothing until the build has already succeeded (`2d14553`)\n\n**Full changelog:** `v0.23.1...v0.23.2`",
