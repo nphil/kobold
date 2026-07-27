@@ -74,7 +74,7 @@ struct DashboardView: View {
                 }
             }
         }
-        .sheet(isPresented: $showDiagnostics) { DiagnosticsView() }
+        .sheet(isPresented: $showDiagnostics) { DiagnosticsView(session: session) }
         .sheet(isPresented: $showCapability) {
             VehicleCapabilityView(capability: session.capability,
                                   profileName: session.profileName)

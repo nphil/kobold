@@ -442,10 +442,6 @@ final class SessionModel {
         guard isCurrent(generation) else { return }
         capability = VehicleCapability(supported: supported, profile: profile)
 
-        let readable = capability?.readable.count ?? 0
-        let total = capability?.supportedCount ?? 0
-        Log.info(.session, "Vehicle reports \(total) standard PIDs; Kobold decodes \(readable)")
-
         let narrowed = profile.restricted(toReportedPIDs: supported)
 
         // A car that implements none of the profile's standard PIDs is far more
@@ -457,6 +453,10 @@ final class SessionModel {
             return
         }
 
+        // Nothing dropped means the narrowed profile is the full one, so there
+        // is nothing to apply. Returning early is not just an optimisation:
+        // rebuilding the bus bumps its revision, which sends the dashboard back
+        // to reload a layout that has not changed.
         let dropped = profile.allSignalIDs.subtracting(narrowed.allSignalIDs)
         guard !dropped.isEmpty else { return }
 
@@ -473,9 +473,6 @@ final class SessionModel {
         guard isCurrent(generation), capability != nil else { return }
         capability?.recordVehicleInfo(reportedPIDs: reportedPIDs)
 
-        let names = capability?.vehicleInfo.map(\.name) ?? []
-        Log.info(.session, "Vehicle information available: "
-                 + (names.isEmpty ? "none" : names.joined(separator: ", ")))
     }
 
     private func recordModules(_ found: [ELM327Driver.ModuleIdentity], generation: Int) {
@@ -486,14 +483,25 @@ final class SessionModel {
                                              header: $0.header, version: $0.version)
         })
 
-        guard !found.isEmpty else {
-            Log.info(.elm327, "No additional modules answered a direct request")
-            return
+    }
+
+    /// Writes the whole coverage report to the log.
+    ///
+    /// The screen is not the only place this belongs. A capability read happens
+    /// once, in a car, and the person reading it has better things to do than
+    /// transcribe a list off a phone — so it goes where it can be read later.
+    private func logCapabilityReport(generation: Int) {
+        guard isCurrent(generation), let capability else { return }
+        for line in CapabilityReport.lines(for: capability, profileName: profileName) {
+            Log.info(.session, line)
         }
-        let summary = found
-            .map { "\($0.label) (\($0.header))\($0.version.map { v in " \(v)" } ?? "")" }
-            .joined(separator: ", ")
-        Log.info(.elm327, "Modules present: \(summary)")
+    }
+
+    /// The same report, for sending on demand.
+    var capabilityReportText: String? {
+        guard let capability else { return nil }
+        return CapabilityReport.lines(for: capability, profileName: profileName)
+            .joined(separator: "\n")
     }
 
     /// Records the transport a run owns so `stop()` can tear it down.
@@ -540,6 +548,7 @@ final class SessionModel {
         }
 
         await probeModules(using: driver, generation: generation)
+        await logCapabilityReport(generation: generation)
     }
 
     /// Asks the modules the profile knows about whether they are fitted.

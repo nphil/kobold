@@ -15,9 +15,14 @@ struct DiagnosticsView: View {
     @AppStorage("ntfyTopic") private var ntfyTopic = ""
     @AppStorage("ntfyLevel") private var ntfyLevelRaw = LogLevel.warning.rawValue
 
+    /// The live session, for the vehicle report. Read-only here — Diagnostics
+    /// observes the session, it does not drive it.
+    let session: SessionModel
+
     @State private var entries: [LogEntry] = []
     @State private var testResult: String?
     @State private var isSendingTest = false
+    @State private var isSendingReport = false
 
     private var level: LogLevel {
         LogLevel(rawValue: ntfyLevelRaw) ?? .warning
@@ -114,6 +119,27 @@ struct DiagnosticsView: View {
             }
             .disabled(ntfyTopic.isEmpty || isSendingTest)
 
+            // Sends regardless of the level above. Someone who taps this has
+            // asked for it, which is a different question from how chatty the
+            // automatic log should be — and the level defaults to warnings, so
+            // without this the report would silently never arrive.
+            Button {
+                Task { await sendReport() }
+            } label: {
+                if isSendingReport {
+                    ProgressView()
+                } else {
+                    Text("Send vehicle report")
+                }
+            }
+            .disabled(ntfyTopic.isEmpty || isSendingReport || session.capabilityReportText == nil)
+
+            if session.capabilityReportText == nil {
+                Text("Available once connected to the car.")
+                    .font(.footnote)
+                    .foregroundStyle(theme.textTertiary)
+            }
+
             if let testResult {
                 Text(testResult)
                     .font(.footnote)
@@ -180,6 +206,21 @@ struct DiagnosticsView: View {
 
     private func refresh() async {
         entries = await Logger.shared.recent(limit: 60)
+    }
+
+    private func sendReport() async {
+        guard let report = session.capabilityReportText else { return }
+        isSendingReport = true
+        defer { isSendingReport = false }
+
+        let sink = NtfySink(configuration: NtfyConfiguration(topic: ntfyTopic,
+                                                             minimumLevel: level))
+        switch await sink.send(report, title: "Kobold vehicle report") {
+        case .success:
+            testResult = "Vehicle report sent to “\(ntfyTopic)”."
+        case .failure(let error):
+            testResult = error.localizedDescription
+        }
     }
 
     private func sendTest() async {

@@ -100,6 +100,16 @@ public final class NtfySink: LogSink {
             level: .info
         )
     }
+
+    /// Publishes text immediately, ignoring `minimumLevel`.
+    ///
+    /// For things the person asked to be sent, which is a different question
+    /// from how chatty the automatic log should be. A report someone tapped a
+    /// button to get must not be silently dropped because the level happens to
+    /// be set to warnings.
+    public func send(_ body: String, title: String) async -> Result<Void, Error> {
+        await uploader.publish(body: body, title: title, level: .info)
+    }
 }
 
 /// How a request actually gets issued. Substituted in tests.
