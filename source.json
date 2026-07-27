@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.18.1",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.18.1\n\n### Performance\n\n- learn how many modules answer each request (`2946fa1`)\n\n**Full changelog:** `v0.18.0...v0.18.1`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.18.1/Kobold-0.18.1-unsigned.ipa",
+          "size": 782239,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.18.0",
           "date": "2026-07-27",
           "localizedDescription": "## v0.18.0\n\n### Features\n\n- write the whole vehicle report to the log, not just the screen (`5b9022f`)\n\n### Build & CI\n\n- gate the release on CI passing instead of racing it (`2826fdc`)\n\n**Full changelog:** `v0.17.0...v0.18.0`",
