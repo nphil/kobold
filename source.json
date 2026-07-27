@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.15.2",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.15.2\n\n### Fixes\n\n- hide signals the vehicle reports it does not support (`809ab1f`)\n\n**Full changelog:** `v0.15.1...v0.15.2`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.15.2/Kobold-0.15.2-unsigned.ipa",
+          "size": 747070,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.15.1",
           "date": "2026-07-27",
           "localizedDescription": "## v0.15.1\n\n### Fixes\n\n- correct the fuel-pressure entries and document long-crank diagnosis (`e79f278`)\n\n**Full changelog:** `v0.15.0...v0.15.1`",
