@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.17.0",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.17.0\n\n### Features\n\n- report which chassis and driver-assistance modules are fitted (`9adf8b9`)\n\n**Full changelog:** `v0.16.0...v0.17.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.17.0/Kobold-0.17.0-unsigned.ipa",
+          "size": 773248,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.16.0",
           "date": "2026-07-27",
           "localizedDescription": "## v0.16.0\n\n### Features\n\n- cover Mode 09 and say what the coverage report cannot see (`0af28f1`)\n\n**Full changelog:** `v0.15.2...v0.16.0`",
