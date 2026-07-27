@@ -142,6 +142,13 @@ public struct ScanProgress: Sendable, Equatable, Codable {
         cursor[Self.key(module: module, service: service)] ?? 0
     }
 
+    /// Every identifier tried, across every module and service.
+    public var totalTried: Int { tried.values.reduce(0, +) }
+    /// Every address that answered "does not exist".
+    public var absentTotal: Int { absent.values.reduce(0, +) }
+    /// Every address that produced no reply at all.
+    public var silentTotal: Int { silent.values.reduce(0, +) }
+
     public func triedCount(module: String, service: UInt8) -> Int {
         tried[Self.key(module: module, service: service)] ?? 0
     }

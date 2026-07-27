@@ -27,12 +27,33 @@ final class ScanModel {
         var id: String { key }
     }
 
+    /// The published snapshot, refreshed a few times a second.
+    ///
+    /// Separate from the working copy because a sweep records tens of
+    /// thousands of results and every write to an observed property invalidates
+    /// the view that reads it. Publishing each one turned a background task
+    /// into sixty thousand layout passes — which is what a 994 ms frame in the
+    /// logs was.
     private(set) var progress = ScanProgress()
+
+    /// The hot copy. Written per identifier, read by nothing that draws.
+    @ObservationIgnored private var working = ScanProgress()
+
     private(set) var isRunning = false
     private(set) var currentTarget: String?
     private(set) var lastMessage: String?
 
+    /// Live position, so a long run visibly moves rather than sitting on a
+    /// percentage that changes once a minute.
+    private(set) var currentService: UInt8?
+    private(set) var currentIdentifier: UInt32?
+    private(set) var ratePerSecond: Double = 0
+    private(set) var elapsed: TimeInterval = 0
+
     private var task: Task<Void, Never>?
+    private var startedAt: Date?
+    private var countAtStart = 0
+    private var lastPublish: Date?
 
     /// Identifiers covered since the last save. An instance property rather
     /// than a local: the sweep reports results through a concurrent closure,
@@ -49,15 +70,34 @@ final class ScanModel {
 
     func load(from data: Data) {
         guard let stored = ScanProgress.decoded(from: data) else { return }
+        working = stored
         progress = stored
     }
 
-    func encoded() -> Data { (try? progress.encoded()) ?? Data() }
+    func encoded() -> Data { (try? working.encoded()) ?? Data() }
 
     func reset() {
         stop()
+        working = ScanProgress()
         progress = ScanProgress()
         lastMessage = nil
+    }
+
+    /// Seconds left at the rate measured so far, once there is enough of a
+    /// sample to mean anything.
+    func estimatedSecondsRemaining(for target: Target) -> TimeInterval? {
+        guard isRunning, ratePerSecond > 1 else { return nil }
+        return Double(remaining(for: target)) / ratePerSecond
+    }
+
+    /// Everything found so far, as text — so a run that is stopped early is
+    /// still worth having.
+    var findingsText: String? {
+        let found = progress.findings
+        guard !found.isEmpty else { return nil }
+        var lines = ["Deep scan findings (\(found.count))"]
+        lines += found.map(\.summary)
+        return lines.joined(separator: "\n")
     }
 
     /// Total addresses left across every service for one module.
@@ -68,11 +108,30 @@ final class ScanModel {
         }
     }
 
+    /// Pushes the working copy to the view, at most a few times a second.
+    private func publish(force: Bool = false) {
+        let now = Date()
+        if !force, let last = lastPublish, now.timeIntervalSince(last) < 0.25 { return }
+        lastPublish = now
+        progress = working
+
+        if let startedAt {
+            elapsed = now.timeIntervalSince(startedAt)
+            let done = working.totalTried - countAtStart
+            ratePerSecond = elapsed > 0.5 ? Double(done) / elapsed : 0
+        }
+    }
+
     func stop() {
         task?.cancel()
         task = nil
         isRunning = false
         currentTarget = nil
+        currentService = nil
+        currentIdentifier = nil
+        // Whatever was reached is kept: stopping early is an expected way to
+        // use this, not a failure, and the next run continues from here.
+        publish(force: true)
     }
 
     /// Runs the sweep. `onProgress` is called periodically so the caller can
@@ -84,6 +143,12 @@ final class ScanModel {
         isRunning = true
         currentTarget = target.key
         lastMessage = nil
+
+        startedAt = Date()
+        countAtStart = working.totalTried
+        lastPublish = nil
+        elapsed = 0
+        ratePerSecond = 0
 
         Log.info(.elm327, "Scanning \(target.label) (\(target.transmit)) — "
                  + "\(remaining(for: target)) identifiers to go")
@@ -103,9 +168,10 @@ final class ScanModel {
                        driver: ELM327Driver,
                        onProgress: @escaping @MainActor () -> Void) async {
 
-        let start = progress.nextIdentifier(module: target.key, service: service.code)
+        let start = working.nextIdentifier(module: target.key, service: service.code)
         guard start < service.count else { return }
 
+        currentService = service.code
         let identifiers = Array(start..<service.count)
         sinceSave = 0
 
@@ -127,18 +193,25 @@ final class ScanModel {
                         identifier: UInt32,
                         outcome: ProbeOutcome,
                         onProgress: @MainActor () -> Void) -> Bool {
-        progress.record(module: module, service: service,
-                        identifier: identifier, outcome: outcome)
+        working.record(module: module, service: service,
+                       identifier: identifier, outcome: outcome)
+        currentIdentifier = identifier
 
+        // A hit is published at once. Waiting a quarter-second to show the one
+        // thing anybody is watching for would be a strange economy.
+        var interesting = false
         if case .data(let bytes) = outcome {
             let finding = ScanFinding(module: module, service: service,
                                       identifier: identifier, bytes: bytes, refusal: nil)
             Log.info(.elm327, "Found \(finding.summary)")
+            interesting = true
         } else if case .refused(let code) = outcome, NegativeResponse.meansGated(code) {
             let finding = ScanFinding(module: module, service: service,
                                       identifier: identifier, bytes: nil, refusal: code)
             Log.info(.elm327, "Gated \(finding.summary)")
+            interesting = true
         }
+        publish(force: interesting)
 
         sinceSave += 1
         if sinceSave >= 64 {
@@ -152,12 +225,15 @@ final class ScanModel {
         isRunning = false
         currentTarget = nil
 
+        currentService = nil
+        currentIdentifier = nil
+
         for service in Self.services {
-            let verdict = progress.verdict(module: target.key, service: service.code)
+            let verdict = working.verdict(module: target.key, service: service.code)
             Log.info(.elm327, "\(target.label) \(service.label): \(verdict)")
         }
 
-        let found = progress.findings(module: target.key)
+        let found = working.findings(module: target.key)
         let readable = found.filter { $0.bytes != nil }
         let gated = found.filter(\.isGated)
 
@@ -167,11 +243,11 @@ final class ScanModel {
         // nothing — and saying "this module has no data" on the back of it is
         // worse than saying nothing at all. It reads as a completed experiment
         // and ends the investigation on a result that was never collected.
-        let deaf = progress.inconclusive(module: target.key)
+        let deaf = working.inconclusive(module: target.key)
         if !deaf.isEmpty && readable.isEmpty && gated.isEmpty {
             // Rolled back so the module is not left looking scanned. An
             // inconclusive run must cost nothing but the time it took.
-            for service in deaf { progress.discard(module: target.key, service: service) }
+            for service in deaf { working.discard(module: target.key, service: service) }
 
             lastMessage = "No replies at all — not even a refusal. That is not a finding "
                 + "about the module: nothing was heard from it. Reconnect and try again."
@@ -187,6 +263,7 @@ final class ScanModel {
             lastMessage = "Every address refused with \"does not exist\". "
                 + "This module genuinely has no data there."
         }
+        publish(force: true)
         Log.info(.elm327, "Scan of \(target.label): \(lastMessage ?? "")")
     }
 }
