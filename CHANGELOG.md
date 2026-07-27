@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.23.1
+
+### Fixes
+
+- identify a stale reply by when it arrived, not by a count (`740ece6`)
+
+**Full changelog:** `v0.23.0...v0.23.1`
+
 ## v0.23.0
 
 ### Features
