@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.23.2
+
+### Fixes
+
+- stop appending the response-count digit by default (`84d7886`)
+
+### Build & CI
+
+- publish nothing until the build has already succeeded (`2d14553`)
+
+**Full changelog:** `v0.23.1...v0.23.2`
+
 ## v0.23.1
 
 ### Fixes
