@@ -12,6 +12,14 @@
 
 **Full changelog:** `v0.24.2...v0.24.3`
 
+## v0.24.2
+
+### Fixes
+
+- say when a rate of zero is another screen holding the adapter (`1806c24`)
+
+**Full changelog:** `v0.24.1...v0.24.2`
+
 ## v0.24.1
 
 ### Fixes

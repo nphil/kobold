@@ -173,9 +173,10 @@ jobs:
           retention-days: 7
 
   publish:
-    # The only job that writes anything durable: the tag, the GitHub release,
-    # the changelog commit and the attached binary, in that order and only
-    # once every part of the build has already succeeded.
+    # The first job that writes anything durable: the tag, the GitHub release
+    # and the attached binary, and only once every part of the build has
+    # already succeeded. The changelog and the Feather manifest follow in jobs
+    # of their own, so neither can take the release down with it.
     name: Publish
     needs: [version, detect-app, ipa]
     # `always()` so a skipped `ipa` (no app target yet) does not skip this too,
@@ -234,32 +235,76 @@ jobs:
               --target "$(git rev-parse HEAD)"
           fi
 
-      - name: Update CHANGELOG
+  changelog:
+    # A job of its own rather than a step of `publish`, because it is the least
+    # important thing here and used to be able to stop the most important one.
+    # A failure while pushing it left the release published and the Feather
+    # manifest still advertising the previous version — installable by nobody —
+    # over a documentation file.
+    name: Update CHANGELOG
+    needs: [version, publish]
+    if: needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Prepend the notes
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
         run: |
           set -euo pipefail
-          touch CHANGELOG.md
-          {
-            echo "# Changelog"
-            echo
-            cat RELEASE_NOTES.md
-            echo
-            # Prior entries, minus the old top-level heading and the blank lines
-            # that would otherwise pile up at the seam.
-            sed '/^# Changelog$/d' CHANGELOG.md | sed '/./,$!d'
-          } > CHANGELOG.new
-          mv CHANGELOG.new CHANGELOG.md
-
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          if git diff --cached --quiet; then
-            echo "CHANGELOG unchanged."
-          else
+
+          # Written outside the tree so it survives switching branches below.
+          scripts/release-notes.sh "$VERSION" > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+          # Rebuilt on top of whatever the branch currently holds, rather than
+          # rebased onto it.
+          #
+          # This checkout is the commit being released, which by definition
+          # predates the *previous* release's changelog commit — so its
+          # CHANGELOG is one entry stale, and prepending to it produces two
+          # commits that both rewrite the same first line. That is a guaranteed
+          # conflict for any two releases in a row, and a rebase cannot resolve
+          # it. Taking the branch's copy and prepending to that has no seam to
+          # conflict over.
+          for attempt in 1 2 3; do
+            # Explicit refspec: this job checked out a bare commit, so the
+            # remote-tracking branch is not guaranteed to exist yet.
+            git fetch --quiet --force origin "${BRANCH}:refs/remotes/origin/${BRANCH}"
+            git checkout --quiet -f -B changelog "refs/remotes/origin/${BRANCH}"
+
+            touch CHANGELOG.md
+            {
+              echo "# Changelog"
+              echo
+              cat "$RUNNER_TEMP/notes.md"
+              echo
+              # Prior entries, minus the old top-level heading and the blank
+              # lines that would otherwise pile up at the seam.
+              sed '/^# Changelog$/d' CHANGELOG.md | sed '/./,$!d'
+            } > CHANGELOG.new
+            mv CHANGELOG.new CHANGELOG.md
+
+            git add CHANGELOG.md
+            if git diff --cached --quiet; then
+              echo "CHANGELOG already current."
+              exit 0
+            fi
+
             # [skip ci] stops this commit from re-triggering the release.
-            git commit -m "docs: update changelog for v${{ needs.version.outputs.version }} [skip ci]"
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          fi
+            git commit --quiet -m "docs: update changelog for v${VERSION} [skip ci]"
+            if git push --quiet origin "HEAD:${BRANCH}"; then exit 0; fi
+            echo "$BRANCH moved; rebuilding on top of it (attempt ${attempt})."
+          done
+          echo "::error::Could not push the changelog after three attempts."
+          exit 1
 
   source:
     # Regenerates the Feather/AltStore source manifest from the published
@@ -276,24 +321,39 @@ jobs:
         with:
           ref: main
 
-      - name: Rebuild manifest
-        run: |
-          set -euo pipefail
-          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            | python3 scripts/build-source.py > source.json
-          python3 -c "import json; json.load(open('source.json'))"
-          cat source.json
-
-      - name: Commit if changed
+      - name: Rebuild and commit the manifest
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add source.json
-          if git diff --cached --quiet; then
-            echo "Source manifest unchanged."
-          else
-            git commit -m "chore: refresh Feather source manifest [skip ci]"
-            git pull --rebase --autostash origin main
-            git push origin HEAD:main
-          fi
+
+          # Same shape as the changelog: regenerated on top of the branch each
+          # time rather than rebased onto it. The manifest is built from the
+          # releases API, so rebuilding it against a newer base is free and
+          # always correct — where a rebase would have to merge two whole-file
+          # rewrites.
+          for attempt in 1 2 3; do
+            git fetch --quiet --force origin main:refs/remotes/origin/main
+            git checkout --quiet -f -B manifest refs/remotes/origin/main
+
+            gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              | python3 scripts/build-source.py > source.json
+            python3 -c "import json; json.load(open('source.json'))"
+
+            git add source.json
+            if git diff --cached --quiet; then
+              echo "Source manifest unchanged."
+              exit 0
+            fi
+
+            git commit --quiet -m "chore: refresh Feather source manifest [skip ci]"
+            if git push --quiet origin HEAD:main; then
+              # Stated plainly, because this line is the answer to "why is the
+              # new build not showing up in Feather".
+              python3 -c "import json,sys; a=json.load(open('source.json'))['apps']; print('Manifest offers: ' + ', '.join(x['name'] + ' ' + (x.get('versions') or [{}])[0].get('version','none') for x in a))"
+              exit 0
+            fi
+            echo "main moved; rebuilding the manifest on top of it (attempt ${attempt})."
+          done
+          echo "::error::Could not push the source manifest after three attempts."
+          exit 1
