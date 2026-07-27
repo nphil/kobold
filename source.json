@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.24.1",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.24.1\n\n### Fixes\n\n- trust a scan reply only when it echoes the address asked for (`84b6944`)\n\n### Documentation\n\n- update changelog for v0.24.0 [skip ci] (`0c7f252`)\n\n**Full changelog:** `v0.24.0...v0.24.1`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.24.1/Kobold-0.24.1-unsigned.ipa",
+          "size": 922538,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.24.0",
           "date": "2026-07-27",
           "localizedDescription": "## v0.24.0\n\n### Features\n\n- choose the chart window and the units from one menu (`99643c9`)\n\n### Documentation\n\n- update changelog for v0.23.3 [skip ci] (`9e7d91c`)\n\n**Full changelog:** `v0.23.3...v0.24.0`",
