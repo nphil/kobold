@@ -59,11 +59,15 @@ public struct ProfileStore: Sendable {
         var signals: [SignalID: SignalDefinition] = [:]
         var derived: [SignalID: DerivedSignal] = [:]
         var absent: [SignalID: String] = [:]
+        var headers: [String: ECUHeader] = [:]
 
         for node in chain.reversed() {
             for signal in node.signals { signals[signal.id] = signal }
             for signal in node.derivedSignals { derived[signal.id] = signal }
             for entry in node.knownAbsent { absent[entry.id] = entry.reason }
+            // Inherited like everything else: a platform profile can describe
+            // the modules every car on it has, and a specific car add its own.
+            for (key, header) in node.ecuHeaders { headers[key] = header }
         }
 
         // A signal explicitly marked absent must not remain requestable, even if
@@ -77,7 +81,8 @@ public struct ProfileStore: Sendable {
                                displayName: profile.displayName,
                                signals: signals,
                                derivedSignals: derived,
-                               knownAbsent: absent)
+                               knownAbsent: absent,
+                               ecuHeaders: headers)
     }
 
     /// Baseline-only profile, used when no vehicle has been selected.

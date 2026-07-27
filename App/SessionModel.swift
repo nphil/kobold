@@ -478,6 +478,24 @@ final class SessionModel {
                  + (names.isEmpty ? "none" : names.joined(separator: ", ")))
     }
 
+    private func recordModules(_ found: [ELM327Driver.ModuleIdentity], generation: Int) {
+        guard isCurrent(generation), capability != nil else { return }
+
+        capability?.recordModules(found.map {
+            VehicleCapability.ModuleIdentity(key: $0.key, label: $0.label,
+                                             header: $0.header, version: $0.version)
+        })
+
+        guard !found.isEmpty else {
+            Log.info(.elm327, "No additional modules answered a direct request")
+            return
+        }
+        let summary = found
+            .map { "\($0.label) (\($0.header))\($0.version.map { v in " \(v)" } ?? "")" }
+            .joined(separator: ", ")
+        Log.info(.elm327, "Modules present: \(summary)")
+    }
+
     /// Records the transport a run owns so `stop()` can tear it down.
     private func adopt(transport: any OBDTransport, generation: Int) {
         guard isCurrent(generation) else { return }
@@ -515,12 +533,35 @@ final class SessionModel {
         // mode, and a car or adapter that will not answer `0900` must still
         // leave the Mode 01 report intact — hence a separate try, not a
         // combined one that would lose both.
-        guard let info = try? await driver.discoverSupportedPIDs(mode: "09",
-                                                                 maximumBanks: 2) else {
+        if let info = try? await driver.discoverSupportedPIDs(mode: "09", maximumBanks: 2) {
+            await recordVehicleInfo(reportedPIDs: info, generation: generation)
+        } else {
             Log.info(.elm327, "No answer to the Mode 09 bitmask; vehicle information unknown")
-            return
         }
-        await recordVehicleInfo(reportedPIDs: info, generation: generation)
+
+        await probeModules(using: driver, generation: generation)
+    }
+
+    /// Asks the modules the profile knows about whether they are fitted.
+    ///
+    /// Last, deliberately. It changes the adapter's header state, and doing that
+    /// before the bitmask reads would put a header change between the app and
+    /// the readings everything else depends on.
+    private nonisolated func probeModules(using driver: ELM327Driver, generation: Int) async {
+        let modules = await probeTargets()
+        guard !modules.isEmpty else { return }
+
+        let found = await driver.identifyModules(modules)
+        await recordModules(found, generation: generation)
+    }
+
+    private func probeTargets() -> [(key: String, label: String, transmit: String, receive: String?)] {
+        profile.probeableModules.map { entry in
+            (key: entry.key,
+             label: entry.header.label ?? entry.key,
+             transmit: entry.header.transmit,
+             receive: entry.header.receive)
+        }
     }
 
     /// The signals to read this pass.

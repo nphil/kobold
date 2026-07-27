@@ -45,6 +45,39 @@ public struct VehicleCapability: Sendable, Equatable {
         public var command: String { "09" + String(format: "%02X", pid) }
     }
 
+    /// Modules that answered a direct diagnostic request.
+    ///
+    /// Not derived from any bitmask — nothing enumerates modules, so this is the
+    /// one part of the report that comes from asking rather than reading a
+    /// declaration. An empty list after a probe means nothing answered, which
+    /// on this platform is a real finding rather than a failure.
+    public private(set) var modules: [ModuleIdentity] = []
+
+    /// Whether a module probe has been run at all, so the UI can tell "nothing
+    /// answered" apart from "never asked".
+    public private(set) var probedModules = false
+
+    public struct ModuleIdentity: Sendable, Equatable, Identifiable {
+        public let key: String
+        public let label: String
+        public let header: String
+        public let version: String?
+
+        public var id: String { key }
+
+        public init(key: String, label: String, header: String, version: String?) {
+            self.key = key
+            self.label = label
+            self.header = header
+            self.version = version
+        }
+    }
+
+    public mutating func recordModules(_ modules: [ModuleIdentity]) {
+        self.modules = modules.sorted { $0.label < $1.label }
+        probedModules = true
+    }
+
     /// Records what Mode 09 declared. Separate from `init` because it is a
     /// second round trip that may not happen — an adapter or car that will not
     /// answer `0900` must leave a capability report that is still valid.

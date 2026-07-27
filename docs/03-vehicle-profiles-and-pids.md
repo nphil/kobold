@@ -55,7 +55,22 @@ This car is the first real profile. Engine: Theta‑II 2.0T GDI turbo (**G4KL**)
 - **Security gateway: reads are fine, writes are not.** Hyundai/Kia/Genesis added a security gateway on 2018+ cars (explicitly including Stinger/G70). It blocks **write‑class** UDS (coding, module config, key programming) — those need an authenticated factory‑level tool. It does **not** block standard PIDs, extended read PIDs, or DTC read/clear, which work on a plain ELM327. Confirmed by multiple owners through at least MY2021. **Implication for this app: full read access, no bidirectional coding.**
 
 ### ECU headers
-Engine `7E0/7E8` · Transmission (TCM) `7E1/7E9` · TPMS `7A0`. Other modules (ABS/ESC, SRS, BCM) are reachable in principle via `ATSH` header‑switching + UDS, but no G70‑specific bare header/PID values are publicly documented.
+Engine `7E0/7E8` · Transmission (TCM) `7E1/7E9` · TPMS `7A0`.
+
+Four further modules **are** documented for this exact platform, from opendbc's captured Hyundai fingerprints for the IK (G70) chassis. Response header is request + `0x8` throughout:
+
+| Module | Request | Response |
+|---|---|---|
+| Forward radar (SCC/FCA) | `7D0` | `7D8` |
+| Forward camera (LKAS/FCA) | `7C4` | `7CC` |
+| ABS/ESC | `7D1` | `7D9` |
+| MDPS / electric power steering | `7D4` | `7DC` |
+
+What is public for these is **identification only** — `22F100` (version), `F110`, manufacturing date. There is no published DID for radar target lists, lane offset, blind‑spot occupancy, or driver‑attention state. That is the honest reason those stay absent: *nobody has documented the request*, not *the gateway blocks it*.
+
+**Do not write `7B7` (blind‑spot/corner radar) into a profile.** It appears in opendbc's generic manufacturer‑wide extra‑ECU list but in **no** G70 fingerprint. Unconfirmed for this car.
+
+Note the asymmetry this creates: the MDPS module is diagnostically addressable, yet steering angle remains unreadable — `SAS11` is a broadcast frame, and being able to talk to a module says nothing about it offering a live value on request.
 
 ### Extended PIDs — concrete, sourced
 

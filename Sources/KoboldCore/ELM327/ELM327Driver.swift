@@ -265,7 +265,17 @@ public actor ELM327Driver {
                      retries: Int = 1) async throws -> ELM327Reply {
         await acquire()
         defer { release() }
+        return try await sendLocked(command, timeout: timeout, retries: retries)
+    }
 
+    /// `send` without the gate, for sequences that must not be interleaved.
+    ///
+    /// Anything that changes the adapter's header state is one of those: a
+    /// command landing between `ATSH 7D0` and the request it was set up for
+    /// would be addressed to the wrong module.
+    private func sendLocked(_ command: String,
+                            timeout: Duration? = nil,
+                            retries: Int = 1) async throws -> ELM327Reply {
         var attempt = 0
         while true {
             let reply = try await sendRaw(command, timeout: timeout)
@@ -301,6 +311,95 @@ public actor ELM327Driver {
             throw ELM327Error.malformedResponse(lines.joined(separator: " | "))
         }
         return try PIDDecoder.decode(response, using: definition)
+    }
+
+    /// A module that answered a diagnostic request, and what it said it is.
+    public struct ModuleIdentity: Sendable, Equatable, Identifiable {
+        public let key: String
+        public let label: String
+        public let header: String
+        /// Firmware or part identifier from `22F100`, when it decodes as text.
+        public let version: String?
+
+        public var id: String { key }
+    }
+
+    /// Asks each module whether it is there, and what version it is.
+    ///
+    /// Standard OBD modules answer a functional broadcast, so they need no
+    /// introduction. Chassis and driver-assistance modules do not — they are
+    /// reachable only by addressing them directly, which means setting the
+    /// adapter's transmit header and receive filter for each one. Hence a probe
+    /// rather than a list: the profile says where to look, the car says what is
+    /// actually fitted.
+    ///
+    /// `22F100` is the identification DID. It is the only one publicly
+    /// documented for these modules — there is no published DID for radar
+    /// targets or lane position, so presence and version is genuinely all this
+    /// can report, and claiming more would be inventing it.
+    ///
+    /// Never throws. A module that does not answer is the expected result on
+    /// most cars, and one that fails must not take the session with it.
+    public func identifyModules(
+        _ modules: [(key: String, label: String, transmit: String, receive: String?)]
+    ) async -> [ModuleIdentity] {
+
+        guard !modules.isEmpty else { return [] }
+
+        await acquire()
+        var found: [ModuleIdentity] = []
+
+        for module in modules {
+            do {
+                _ = try await sendLocked("ATSH \(module.transmit)", retries: 0)
+                if let receive = module.receive {
+                    // Without this, several modules' multi-frame replies
+                    // interleave and their sequence numbers collide.
+                    _ = try await sendLocked("ATCRA \(receive)", retries: 0)
+                }
+
+                let reply = try await sendLocked("22F100", timeout: .milliseconds(1200), retries: 0)
+                guard case .data(let lines) = reply,
+                      let response = try? ISOTPAssembler.assemble(lines: lines).first
+                else { continue }
+
+                found.append(ModuleIdentity(key: module.key,
+                                            label: module.label,
+                                            header: module.transmit,
+                                            version: Self.identifier(from: response)))
+            } catch {
+                // Expected whenever a module is not fitted. Worth a line at
+                // debug, not a warning: absence is the common case.
+                continue
+            }
+        }
+
+        // Restored unconditionally. Leaving the header pointed at the radar
+        // would break every subsequent PID read, so this must happen on the
+        // failure path as much as the success one — which is why nothing above
+        // is allowed to throw out of this function.
+        _ = try? await sendLocked("ATAR", retries: 0)
+        _ = try? await sendLocked("ATSH 7DF", retries: 0)
+
+        release()
+        return found
+    }
+
+    /// Pulls a readable identifier out of a `62 F1 00 …` reply.
+    ///
+    /// Some modules answer with ASCII, others with a binary part number. Text
+    /// is returned when it is text and nothing is returned when it is not,
+    /// rather than rendering bytes as mojibake and calling it a version.
+    private static func identifier(from response: ECUResponse) -> String? {
+        let payload = response.data(pidByteCount: 2)
+        guard !payload.isEmpty else { return nil }
+
+        let printable = payload.filter { $0 >= 0x20 && $0 < 0x7F }
+        guard printable.count >= max(4, payload.count / 2) else { return nil }
+
+        let text = String(decoding: printable, as: UTF8.self)
+            .trimmingCharacters(in: .whitespaces)
+        return text.isEmpty ? nil : text
     }
 
     /// Reads stored trouble codes (Mode 03).

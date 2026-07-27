@@ -430,15 +430,42 @@
       "ecuHeaders": {
         "engine": {
           "transmit": "7E0",
-          "receive": "7E8"
+          "receive": "7E8",
+          "label": "Engine"
         },
         "transmission": {
           "transmit": "7E1",
-          "receive": "7E9"
+          "receive": "7E9",
+          "label": "Transmission"
         },
         "tpms": {
           "transmit": "7A0",
-          "receive": "7A8"
+          "receive": "7A8",
+          "label": "Tyre Pressure Monitoring"
+        },
+        "fwdRadar": {
+          "transmit": "7D0",
+          "receive": "7D8",
+          "label": "Forward Radar (Smart Cruise)",
+          "probe": true
+        },
+        "fwdCamera": {
+          "transmit": "7C4",
+          "receive": "7CC",
+          "label": "Forward Camera (Lane Keeping)",
+          "probe": true
+        },
+        "absEsc": {
+          "transmit": "7D1",
+          "receive": "7D9",
+          "label": "ABS / Stability Control",
+          "probe": true
+        },
+        "eps": {
+          "transmit": "7D4",
+          "receive": "7DC",
+          "label": "Electric Power Steering",
+          "probe": true
         }
       },
       "signals": [],

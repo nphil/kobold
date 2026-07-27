@@ -180,10 +180,23 @@ public struct KnownAbsentSignal: Codable, Sendable, Equatable {
 public struct ECUHeader: Codable, Sendable, Equatable {
     public let transmit: String
     public let receive: String?
+    /// What to call this module to a person. `fwdRadar` is a key, not a name.
+    public let label: String?
+    /// Whether this module is worth asking "are you there" on connect.
+    ///
+    /// Off by default. Probing costs a round trip and a header change each, and
+    /// the standard OBD modules announce themselves by answering the PID
+    /// bitmask already — there is nothing to discover about them.
+    public let probe: Bool?
 
-    public init(transmit: String, receive: String? = nil) {
+    public init(transmit: String,
+                receive: String? = nil,
+                label: String? = nil,
+                probe: Bool? = nil) {
         self.transmit = transmit
         self.receive = receive
+        self.label = label
+        self.probe = probe
     }
 }
 
@@ -226,17 +239,29 @@ public struct ResolvedProfile: Sendable, Equatable {
     public let signals: [SignalID: SignalDefinition]
     public let derivedSignals: [SignalID: DerivedSignal]
     public let knownAbsent: [SignalID: String]
+    /// Addressable modules on this vehicle, keyed by profile-local name.
+    public let ecuHeaders: [String: ECUHeader]
 
     public init(id: String,
                 displayName: String,
                 signals: [SignalID: SignalDefinition],
                 derivedSignals: [SignalID: DerivedSignal],
-                knownAbsent: [SignalID: String]) {
+                knownAbsent: [SignalID: String],
+                ecuHeaders: [String: ECUHeader] = [:]) {
         self.id = id
         self.displayName = displayName
         self.signals = signals
         self.derivedSignals = derivedSignals
         self.knownAbsent = knownAbsent
+        self.ecuHeaders = ecuHeaders
+    }
+
+    /// Modules worth asking "are you there" on connect, in a stable order.
+    public var probeableModules: [(key: String, header: ECUHeader)] {
+        ecuHeaders
+            .filter { $0.value.probe == true }
+            .sorted { $0.key < $1.key }
+            .map { ($0.key, $0.value) }
     }
 
     /// Every signal the profile can produce, requested or derived.
@@ -300,10 +325,14 @@ public struct ResolvedProfile: Sendable, Equatable {
             }
         }
 
+        // Headers pass through untouched. The bitmask describes PIDs, not
+        // modules, and a module is not disclaimed by a PID list that never
+        // mentioned it.
         return ResolvedProfile(id: id,
                                displayName: displayName,
                                signals: keptSignals,
                                derivedSignals: keptDerived,
-                               knownAbsent: absent)
+                               knownAbsent: absent,
+                               ecuHeaders: ecuHeaders)
     }
 }

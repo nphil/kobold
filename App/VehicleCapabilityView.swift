@@ -99,6 +99,25 @@ struct VehicleCapabilityView: View {
                 }
             }
 
+            if capability.probedModules {
+                Section {
+                    if capability.modules.isEmpty {
+                        Text("None answered. On this platform the gateway may not route requests to them from the OBD port.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(theme.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        ForEach(capability.modules) { module in
+                            moduleRow(module)
+                        }
+                    }
+                } header: {
+                    sectionHeader("Modules", symbol: "cpu")
+                } footer: {
+                    Text("Driver-assistance and chassis modules, asked directly rather than read from a list — nothing enumerates modules. Presence and version is all that is publicly documented for these; there is no published request for radar targets or lane position.")
+                }
+            }
+
             limitsSection
         }
         .scrollContentBackground(.hidden)
@@ -207,6 +226,28 @@ struct VehicleCapabilityView: View {
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(name), \(command), not decoded yet")
+    }
+
+    private func moduleRow(_ module: VehicleCapability.ModuleIdentity) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(module.label)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(theme.textPrimary)
+                // The version when the module gave one, the address when it did
+                // not — never a blank line implying the answer was empty.
+                Text(module.version ?? "responds at \(module.header)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "checkmark.circle")
+                .foregroundStyle(theme.accent)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(module.label), present\(module.version.map { ", version \($0)" } ?? "")")
     }
 
     private func readableRow(_ name: String, muted: Bool = false) -> some View {
