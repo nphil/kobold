@@ -111,7 +111,7 @@
           "unit": "kPa",
           "minimum": 0,
           "maximum": 765,
-          "summary": "Low-pressure fuel supply, before the high-pressure pump. Many direct-injection engines do not report it.",
+          "summary": "Low-pressure fuel supply, before the high-pressure pump. It reads to 765 kPa and no further, so it clips above that even though the sensor behind it measures to 1,100 kPa. Many direct-injection engines do not report it at all.",
           "category": "fuel"
         },
         {
@@ -127,13 +127,13 @@
           },
           "unit": "kPa",
           "minimum": 0,
-          "maximum": 30000,
-          "summary": "High-pressure fuel rail. On a direct-injection engine this runs far above the low-pressure side. A rail that bleeds down while parked is a common cause of long cranking after the car has sat.",
+          "maximum": 20000,
+          "summary": "High-pressure fuel rail, the one direct injection actually runs on. Warm idle sits near 40 bar and full load reaches 200 bar. Watch it after shutdown: a rail that bleeds down while the car sits is a common cause of long cranking on the next start.",
           "category": "fuel"
         },
         {
           "id": "fuelRailPressureRelative",
-          "label": "Fuel Rail Pressure (Relative)",
+          "label": "Fuel Pressure (Manifold-Relative)",
           "header": "7E0",
           "mode": "01",
           "pid": "22",
@@ -144,8 +144,8 @@
           },
           "unit": "kPa",
           "minimum": 0,
-          "maximum": 6000,
-          "summary": "Fuel rail pressure measured against manifold vacuum rather than against the atmosphere.",
+          "maximum": 5177,
+          "summary": "Pressure measured against manifold vacuum rather than the atmosphere. It tops out near 52 bar, so on a direct-injection engine that runs to 200 bar it cannot show the high-pressure rail. Read it as the low-pressure supply and treat any value pinned at the top as off the scale.",
           "category": "fuel"
         },
         {
