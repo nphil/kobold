@@ -38,6 +38,32 @@ final class UDSScanTests: XCTestCase {
         XCTAssertEqual(ELM327Driver.classify(response, service: 0x22), .silent)
     }
 
+    /// The one a service check cannot catch. Every command in a sweep is a
+    /// `22`, so a reply that is one address stale looks perfectly valid — and
+    /// recorded as a finding it invents data at an address that holds none.
+    func testAReplyEchoingADifferentIdentifierIsNotAFinding() {
+        let stale = ECUResponse(header: "7D8", payload: [0x62, 0x01, 0x20, 0x4B])
+        XCTAssertEqual(ELM327Driver.classify(stale, service: 0x22, identifier: 0x0121),
+                       .silent)
+        XCTAssertEqual(ELM327Driver.classify(stale, service: 0x22, identifier: 0x0120),
+                       .data([0x4B]))
+    }
+
+    /// A refusal echoes no identifier, so it must still be read as a refusal.
+    func testARefusalIsStillARefusalWhenAnIdentifierIsExpected() {
+        let response = ECUResponse(header: "7D8", payload: [0x7F, 0x22, 0x31])
+        XCTAssertEqual(ELM327Driver.classify(response, service: 0x22, identifier: 0x0121),
+                       .refused(0x31))
+    }
+
+    func testServiceTwentyOneEchoIsOneByteWide() {
+        let response = ECUResponse(header: "7D9", payload: [0x61, 0xA0, 0x12])
+        XCTAssertEqual(ELM327Driver.classify(response, service: 0x21, identifier: 0xA0),
+                       .data([0x12]))
+        XCTAssertEqual(ELM327Driver.classify(response, service: 0x21, identifier: 0xA1),
+                       .silent)
+    }
+
     // MARK: - What a null result means
 
     func testOnlyRequestOutOfRangeMeansAbsent() {
@@ -154,6 +180,64 @@ final class UDSScanTests: XCTestCase {
 
         XCTAssertEqual(progress.findings(module: "absEsc").count, 1)
         XCTAssertEqual(progress.nextIdentifier(module: "absEsc", service: 0x22), 8)
+    }
+
+    // MARK: - A service the module does not implement
+
+    /// The waste this exists to stop: three modules each answered "Service not
+    /// supported" 256 times, which is 768 probes to learn what the first reply
+    /// already said.
+    func testAnUnimplementedServiceSkipsTheRestOfItsAddressSpace() {
+        var progress = ScanProgress()
+        for identifier in UInt32(0)..<UInt32(3) {
+            progress.record(module: "absEsc", service: 0x21,
+                            identifier: identifier, outcome: .refused(0x11))
+        }
+        progress.markUnsupported(module: "absEsc", service: 0x21, count: 0x100)
+
+        XCTAssertTrue(progress.isUnsupported(module: "absEsc", service: 0x21))
+        XCTAssertEqual(progress.nextIdentifier(module: "absEsc", service: 0x21), 0x100,
+                       "the sweep must read as finished, not as stopped early")
+
+        let verdict = progress.verdict(module: "absEsc", service: 0x21)
+        XCTAssertTrue(verdict.contains("not implemented"), verdict)
+        XCTAssertTrue(verdict.contains("3"), verdict)
+
+        // Service 22 is a separate question and must be untouched.
+        XCTAssertFalse(progress.isUnsupported(module: "absEsc", service: 0x22))
+        XCTAssertEqual(progress.nextIdentifier(module: "absEsc", service: 0x22), 0)
+    }
+
+    func testDiscardingClearsTheUnsupportedVerdictToo() {
+        var progress = ScanProgress()
+        progress.record(module: "absEsc", service: 0x21, identifier: 0, outcome: .refused(0x11))
+        progress.markUnsupported(module: "absEsc", service: 0x21, count: 0x100)
+
+        progress.discard(module: "absEsc", service: 0x21)
+
+        XCTAssertFalse(progress.isUnsupported(module: "absEsc", service: 0x21))
+        XCTAssertEqual(progress.nextIdentifier(module: "absEsc", service: 0x21), 0)
+    }
+
+    /// Progress saved before this field existed must still load. An hour of
+    /// scanning is not an acceptable price for adding a property.
+    func testProgressSavedBeforeTheUnsupportedFieldExistedStillDecodes() throws {
+        let legacy = """
+        {"cursor":{"absEsc/22":41},"findings":[],"tried":{"absEsc/22":41},\
+        "absent":{"absEsc/22":41},"silent":{}}
+        """
+        let restored = try XCTUnwrap(ScanProgress.decoded(from: Data(legacy.utf8)))
+        XCTAssertEqual(restored.nextIdentifier(module: "absEsc", service: 0x22), 41)
+        XCTAssertFalse(restored.isUnsupported(module: "absEsc", service: 0x22))
+    }
+
+    func testUnsupportedSurvivesARoundTrip() throws {
+        var progress = ScanProgress()
+        progress.record(module: "absEsc", service: 0x21, identifier: 0, outcome: .refused(0x11))
+        progress.markUnsupported(module: "absEsc", service: 0x21, count: 0x100)
+
+        let restored = try XCTUnwrap(ScanProgress.decoded(from: progress.encoded()))
+        XCTAssertTrue(restored.isUnsupported(module: "absEsc", service: 0x21))
     }
 
     // MARK: - Rendering

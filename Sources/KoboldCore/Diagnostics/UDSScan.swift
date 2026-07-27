@@ -132,6 +132,14 @@ public struct ScanProgress: Sendable, Equatable, Codable {
     /// such is exactly the false negative this whole design exists to avoid.
     public private(set) var silent: [String: Int] = [:]
 
+    /// Services a module has stated it does not implement at all.
+    ///
+    /// Optional so a progress blob written before this existed still decodes:
+    /// a synthesised `init(from:)` treats a missing key as `nil` for an
+    /// optional and as an error for anything else, and losing an hour of scan
+    /// progress to a schema addition would be an unforced error.
+    private var unsupported: Set<String>?
+
     public init() {}
 
     public static func key(module: String, service: UInt8) -> String {
@@ -176,11 +184,32 @@ public struct ScanProgress: Sendable, Equatable, Codable {
         }
     }
 
+    /// Whether the module has said it does not implement this service at all.
+    public func isUnsupported(module: String, service: UInt8) -> Bool {
+        unsupported?.contains(Self.key(module: module, service: service)) ?? false
+    }
+
+    /// Records that the module refuses the whole service, and skips the rest.
+    ///
+    /// `Service not supported` is a statement about the service, not the
+    /// address: once a module has said it three times there is nothing to learn
+    /// from the remaining 65,000 addresses, and asking anyway is how a sweep
+    /// spends twenty minutes to conclude what its first reply already said.
+    public mutating func markUnsupported(module: String, service: UInt8, count: UInt32) {
+        let key = Self.key(module: module, service: service)
+        cursor[key] = count
+        unsupported = (unsupported ?? []).union([key])
+    }
+
     /// What the run has established, in the terms that decide what to do next.
     public func verdict(module: String, service: UInt8) -> String {
         let key = Self.key(module: module, service: service)
         let tried = tried[key] ?? 0
         guard tried > 0 else { return "not started" }
+
+        if isUnsupported(module: module, service: service) {
+            return "not implemented by this module — stopped after \(tried)"
+        }
 
         let mine = findings.filter { $0.module == module && $0.service == service }
         let data = mine.filter { $0.bytes != nil }.count
@@ -231,6 +260,7 @@ public struct ScanProgress: Sendable, Equatable, Codable {
         tried[key] = nil
         absent[key] = nil
         silent[key] = nil
+        unsupported?.remove(key)
         findings.removeAll { $0.module == module && $0.service == service }
     }
 

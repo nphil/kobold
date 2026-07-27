@@ -61,6 +61,17 @@ final class ScanModel {
     /// rightly refuses.
     private var sinceSave = 0
 
+    /// Runs of `Service not supported`, for the same reason `sinceSave` is a
+    /// property: the sweep reports through a concurrent closure.
+    private var serviceRefusals = 0
+
+    /// How many identical "this service does not exist" refusals are enough.
+    ///
+    /// Three rather than one because a single reply can be a stale one, and
+    /// abandoning a whole service on a desynchronised read would be the same
+    /// false negative this scanner exists to avoid — in the other direction.
+    private static let refusalsBeforeGivingUp = 3
+
     /// Service 21 is one byte, so 256 addresses — small enough to always finish.
     /// Service 22 is two bytes and is where the long run goes.
     static let services: [(code: UInt8, label: String, count: UInt32)] = [
@@ -92,11 +103,38 @@ final class ScanModel {
 
     /// Everything found so far, as text — so a run that is stopped early is
     /// still worth having.
-    var findingsText: String? {
+    ///
+    /// Grouped under the module it came from, with the verdict for each service
+    /// above it. An address list on its own is unreadable later: `220121 → 4B`
+    /// means nothing without knowing which module answered, and nothing again
+    /// without knowing how many addresses were asked to produce it. Both were
+    /// on screen at the time and neither survived into the export.
+    func findingsText(targets: [Target]) -> String? {
         let found = progress.findings
         guard !found.isEmpty else { return nil }
+
         var lines = ["Deep scan findings (\(found.count))"]
-        lines += found.map(\.summary)
+        let labels = Dictionary(targets.map { ($0.key, $0.label) }, uniquingKeysWith: { a, _ in a })
+
+        // Modules in the order they were offered, then anything left over from
+        // an older run whose module is no longer in the list — dropping those
+        // would quietly lose findings.
+        let known = targets.map(\.key)
+        let leftover = found.map(\.module).filter { !known.contains($0) }
+        for module in known + Array(Set(leftover)).sorted() {
+            let mine = found.filter { $0.module == module }
+            guard !mine.isEmpty else { continue }
+
+            lines.append("")
+            lines.append("\(labels[module] ?? module) — \(mine.count) found")
+            for service in Self.services {
+                let tried = progress.triedCount(module: module, service: service.code)
+                guard tried > 0 else { continue }
+                lines.append("  \(service.label): "
+                             + progress.verdict(module: module, service: service.code))
+            }
+            lines += mine.map { "  " + $0.summary }
+        }
         return lines.joined(separator: "\n")
     }
 
@@ -174,6 +212,7 @@ final class ScanModel {
         currentService = service.code
         let identifiers = Array(start..<service.count)
         sinceSave = 0
+        serviceRefusals = 0
 
         await driver.scanIdentifiers(
             transmit: target.transmit,
@@ -183,19 +222,39 @@ final class ScanModel {
         ) { [weak self] identifier, outcome in
             guard let self else { return false }
             return await self.absorb(module: target.key, service: service.code,
+                                     count: service.count,
                                      identifier: identifier, outcome: outcome,
                                      onProgress: onProgress)
         }
+        onProgress()
     }
 
     private func absorb(module: String,
                         service: UInt8,
+                        count: UInt32,
                         identifier: UInt32,
                         outcome: ProbeOutcome,
                         onProgress: @MainActor () -> Void) -> Bool {
         working.record(module: module, service: service,
                        identifier: identifier, outcome: outcome)
         currentIdentifier = identifier
+
+        // A module that says "I do not implement this service" is answering
+        // about the service, not the address. Asking the other 65,000 addresses
+        // is twenty minutes spent re-reading the first reply.
+        if case .refused(0x11) = outcome {
+            serviceRefusals += 1
+            if serviceRefusals >= Self.refusalsBeforeGivingUp {
+                working.markUnsupported(module: module, service: service, count: count)
+                Log.info(.elm327, "\(String(format: "Service %02X", service)) is not implemented "
+                         + "on \(module) — skipping the rest of its address space")
+                publish(force: true)
+                onProgress()
+                return false
+            }
+        } else {
+            serviceRefusals = 0
+        }
 
         // A hit is published at once. Waiting a quarter-second to show the one
         // thing anybody is watching for would be a strange economy.
@@ -259,6 +318,11 @@ final class ScanModel {
         } else if !gated.isEmpty {
             lastMessage = "Nothing readable, but \(gated.count) refused in a way that means "
                 + "they exist and are locked. A different diagnostic session would be needed."
+        } else if Self.services.allSatisfy({
+            working.isUnsupported(module: target.key, service: $0.code)
+        }) {
+            lastMessage = "This module implements neither service. There is no address "
+                + "space here to search — whatever it publishes, it publishes another way."
         } else {
             lastMessage = "Every address refused with \"does not exist\". "
                 + "This module genuinely has no data there."

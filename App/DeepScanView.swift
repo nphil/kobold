@@ -254,7 +254,7 @@ struct DeepScanView: View {
     }
 
     private func sendFindings() async {
-        guard let text = model.findingsText else { return }
+        guard let text = model.findingsText(targets: targets) else { return }
         isSending = true
         defer { isSending = false }
 

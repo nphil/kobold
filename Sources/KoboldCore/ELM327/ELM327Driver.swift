@@ -518,21 +518,36 @@ public actor ELM327Driver {
         }
 
         let width = service == 0x21 ? 2 : 4
+        var consecutiveSilences = 0
+
+        func probe(_ identifier: UInt32, timeout: Duration) async -> ProbeOutcome {
+            let command = String(format: "%02X%0\(width)X", service, identifier)
+            guard let reply = try? await sendLocked(command, timeout: timeout, retries: 0),
+                  case .data(let lines) = reply,
+                  let response = try? ISOTPAssembler.assemble(lines: lines).first
+            else { return .silent }
+            return Self.classify(response, service: service, identifier: identifier)
+        }
+
         for identifier in identifiers {
             if Task.isCancelled { break }
 
-            let command = String(format: "%02X%0\(width)X", service, identifier)
-            let outcome: ProbeOutcome
+            // A short timeout on purpose. A module that lacks the identifier
+            // refuses promptly, and that refusal is most of a sweep.
+            var outcome = await probe(identifier, timeout: .milliseconds(400))
 
-            // A short timeout on purpose. A module that has the identifier
-            // answers promptly; the slow case is the one that is not coming.
-            if let reply = try? await sendLocked(command, timeout: .milliseconds(400), retries: 0),
-               case .data(let lines) = reply,
-               let response = try? ISOTPAssembler.assemble(lines: lines).first {
-                outcome = Self.classify(response, service: service)
-            } else {
-                outcome = .silent
+            // Silence gets one slow retry. A multi-frame reply is not slow
+            // because the module is thinking — it is slow because it is long,
+            // and a long reply is the whole reason for scanning. Discarding it
+            // as "no answer" would hide precisely the addresses worth finding.
+            //
+            // Bounded by a run of silences so a module that is simply not there
+            // costs one extra probe rather than doubling an hour-long sweep.
+            if case .silent = outcome, consecutiveSilences < 8 {
+                outcome = await probe(identifier, timeout: .milliseconds(1_500))
             }
+
+            if case .silent = outcome { consecutiveSilences += 1 } else { consecutiveSilences = 0 }
 
             if await handler(identifier, outcome) == false { break }
         }
@@ -546,7 +561,16 @@ public actor ELM327Driver {
     ///
     /// `7F <service> <reason>` is a negative response. Reading it as data would
     /// turn every refusal into a three-byte "finding" and bury the real ones.
-    static func classify(_ response: ECUResponse, service: UInt8) -> ProbeOutcome {
+    ///
+    /// `identifier` is checked against the one the reply echoes. Every command
+    /// in a sweep begins `62`, so a reply that is one command stale passes a
+    /// service check and lands on the wrong address — the sweep then reports a
+    /// finding at an address that holds nothing, which is worse than missing it.
+    /// Passing `nil` skips the check, for callers that do not know what they
+    /// asked for.
+    static func classify(_ response: ECUResponse,
+                         service: UInt8,
+                         identifier: UInt32? = nil) -> ProbeOutcome {
         let payload = response.payload
         guard let first = payload.first else { return .silent }
 
@@ -559,6 +583,13 @@ public actor ELM327Driver {
         // identifier. Anything else is somebody else's traffic.
         guard first == service &+ 0x40 else { return .silent }
         let echoWidth = service == 0x21 ? 1 : 2
+        guard payload.count > echoWidth else { return .silent }
+
+        if let identifier {
+            let echoed = payload[1...echoWidth].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+            guard echoed == identifier else { return .silent }
+        }
+
         let data = response.data(pidByteCount: echoWidth)
         return data.isEmpty ? .silent : .data(data)
     }
