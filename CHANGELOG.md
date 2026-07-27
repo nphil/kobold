@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.18.0
+
+### Features
+
+- write the whole vehicle report to the log, not just the screen (`5b9022f`)
+
+### Build & CI
+
+- gate the release on CI passing instead of racing it (`2826fdc`)
+
+**Full changelog:** `v0.17.0...v0.18.0`
+
 ## v0.17.0
 
 ### Features
