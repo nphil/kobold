@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.15.0",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.15.0\n\n### Features\n\n- report what the car supports against what Kobold decodes (`3e1db00`)\n\n**Full changelog:** `v0.14.1...v0.15.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.15.0/Kobold-0.15.0-unsigned.ipa",
+          "size": 740630,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.14.1",
           "date": "2026-07-26",
           "localizedDescription": "## v0.14.1\n\n### Fixes\n\n- union the supported-PID bitmask across every module that answers (`c7af396`)\n\n**Full changelog:** `v0.14.0...v0.14.1`",
