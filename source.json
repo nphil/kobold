@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.20.0",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.20.0\n\n### Features\n\n- decode signed values, and three more of the car's PIDs (`a8482e6`)\n\n**Full changelog:** `v0.19.0...v0.20.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.20.0/Kobold-0.20.0-unsigned.ipa",
+          "size": 784216,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.19.0",
           "date": "2026-07-27",
           "localizedDescription": "## v0.19.0\n\n### Features\n\n- decode 22 more signals the reference car reports (`12c60d6`)\n\n**Full changelog:** `v0.18.1...v0.19.0`",
