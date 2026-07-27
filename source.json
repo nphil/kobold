@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.23.0",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.23.0\n\n### Features\n\n- show the scan working, and let a partial run be used (`0973de8`)\n\n**Full changelog:** `v0.22.1...v0.23.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.23.0/Kobold-0.23.0-unsigned.ipa",
+          "size": 899346,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.22.1",
           "date": "2026-07-27",
           "localizedDescription": "## v0.22.1\n\n### Fixes\n\n- stop chasing adverts at the noise floor, and say which phase failed (`ac71cbc`)\n- stop a late reply from shifting every read after it (`ba526a3`)\n\n**Full changelog:** `v0.22.0...v0.22.1`",
