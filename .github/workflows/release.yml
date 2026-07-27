@@ -1,9 +1,20 @@
 name: Release
 
+# Triggered by CI finishing, not by the push itself.
+#
+# The two used to fire in parallel on the same commit, which meant a commit
+# could fail CI and still cut a version, build an IPA and refresh the Feather
+# manifest — and did. Release does not set warnings-as-errors, so it published
+# a commit whose iOS build CI had just rejected. Publishing something that has
+# not passed the gate defeats having one.
+#
+# The changelog and manifest commits carry `[skip ci]`, so they raise no CI run
+# and cannot trigger a release of themselves.
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       bump:
@@ -27,13 +38,22 @@ permissions:
 jobs:
   verify:
     name: Verify
+    # Everything downstream needs this job, so one condition gates the workflow.
+    # A manual dispatch has no triggering run and is trusted deliberately — it
+    # is how a release is cut when CI is stuck.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     container: swift:6.0.3
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      # A red build must never be published, so the gate is re-run here rather
-      # than assumed from CI.
+      # Kept even though CI now gates this workflow: CI's verdict is about the
+      # commit it tested, and this re-runs against the commit being published.
+      # Cheap insurance against the two drifting apart.
       - name: Test
         run: swift test
 
@@ -47,6 +67,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # The commit CI tested, not whatever main happens to be now. Under
+          # `workflow_run` the default is the branch tip, which is a different
+          # commit the moment anything lands while a release is in flight.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
           fetch-depth: 0  # full history + tags for version and notes
 
       - name: Compute next version
@@ -135,6 +159,8 @@ jobs:
       has_app: ${{ steps.check.outputs.has_app }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
       - id: check
         run: |
           # The Xcode project is generated from project.yml, so that file — not
@@ -162,6 +188,8 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Install XcodeGen
         run: brew install xcodegen

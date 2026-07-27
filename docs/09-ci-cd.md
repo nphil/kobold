@@ -5,7 +5,7 @@
 ## The short version
 
 - **Every push** builds and tests on Linux *and* macOS, and fails on any new compiler warning.
-- **Every push to the release branch** computes the next semantic version from commit messages, tags it, and publishes a GitHub Release with generated notes — or skips cleanly when nothing release-worthy landed.
+- **Every push to the release branch that passes CI** computes the next semantic version from commit messages, tags it, and publishes a GitHub Release with generated notes — or skips cleanly when nothing release-worthy landed.
 - **Nothing is ever released from a red build.**
 - **No signing material is stored in GitHub.** IPAs are published unsigned; Feather signs on-device with your certificate.
 
@@ -33,11 +33,17 @@ The warnings-as-errors step exists because `KoboldCore` builds clean today and t
 
 The `scripts` job exists so a broken release script is caught on an ordinary push, not at the moment you actually need to ship.
 
-### `release.yml` — on push to the release branch, or manually
+### `release.yml` — after CI passes on the release branch, or manually
 
-1. **`verify`** — re-runs the test suite. A release must never be cut from an unverified tree, so this gate is repeated rather than inferred from CI.
+Triggered by **CI completing successfully**, not by the push. Every job checks out `workflow_run.head_sha` — the commit CI actually tested — rather than the branch tip, which is a different commit the moment anything lands mid-release.
+
+1. **`verify`** — gates the whole workflow on `workflow_run.conclusion == 'success'`, and re-runs the test suite against the exact commit being published.
 2. **`publish`** — computes the version, generates notes, updates `CHANGELOG.md`, creates the tag and GitHub Release.
-3. **`detect-app` / `ipa`** — dormant. See [Shipping the app](#shipping-the-app) below.
+3. **`detect-app` / `ipa`** — builds and attaches the unsigned IPA. See [Shipping the app](#shipping-the-app) below.
+
+> **Why the trigger changed.** The two workflows used to fire in parallel on the same push, so CI's verdict arrived too late to stop anything. On `809ab1f` a `var` that should have been `let` failed the warnings gate — CI went red on three jobs, including the iOS build — while Release, which does not set warnings-as-errors, sailed through and shipped v0.16.0 with a refreshed Feather manifest. Nothing was broken for users, but the gate had been decorative rather than load-bearing, and the failure only surfaced because someone went looking.
+>
+> Manual dispatch deliberately keeps no such gate: it is how you cut a release when CI itself is stuck.
 
 Manual runs (`workflow_dispatch`) accept a **`bump`** override (`auto`/`patch`/`minor`/`major`) and a **`dry_run`** flag that computes and prints the version without publishing anything.
 
@@ -79,7 +85,7 @@ Housekeeping-only pushes produce no release, so documentation and CI tweaks don'
 
 ## Shipping the app
 
-The `ipa` job is written and wired but **inert until an iOS app target exists** — `detect-app` looks for an `.xcodeproj`/`.xcworkspace` and skips the build when there isn't one. Once an app target lands it activates with no further changes, and will:
+The `ipa` job builds and attaches the app on every release. `detect-app` still looks for a `project.yml`/`.xcodeproj` and skips the build when there isn't one, so the workflow stays valid for a package-only tree. On each release it will:
 
 1. Archive with `CODE_SIGNING_ALLOWED=NO`, stamping `MARKETING_VERSION` from the computed version and `CURRENT_PROJECT_VERSION` from the run number.
 2. Package the `.app` into an **unsigned** `.ipa`.
@@ -93,7 +99,7 @@ Distribution is via Feather using **your own certificate**, and Feather signs on
 - No annual CI breakage when the certificate rolls over.
 - The artifact is identical regardless of which certificate eventually signs it.
 
-> **Caveat:** the `ipa` job's `xcodebuild` invocation has not been executed, because there is no app target to run it against yet. Treat it as a considered starting point rather than a verified one, and expect to adjust the scheme/path details on first real run.
+This path is exercised on every release and has shipped installable builds; the scheme and path details below are the ones that actually work rather than a guess.
 
 ### The Feather source
 
