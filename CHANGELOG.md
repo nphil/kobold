@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.23.0
+
+### Features
+
+- show the scan working, and let a partial run be used (`0973de8`)
+
+**Full changelog:** `v0.22.1...v0.23.0`
+
 ## v0.22.1
 
 ### Fixes
