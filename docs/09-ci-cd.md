@@ -37,9 +37,19 @@ The `scripts` job exists so a broken release script is caught on an ordinary pus
 
 Triggered by **CI completing successfully**, not by the push. Every job checks out `workflow_run.head_sha` — the commit CI actually tested — rather than the branch tip, which is a different commit the moment anything lands mid-release.
 
-1. **`verify`** — gates the whole workflow on `workflow_run.conclusion == 'success'`, and re-runs the test suite against the exact commit being published.
-2. **`publish`** — computes the version, generates notes, updates `CHANGELOG.md`, creates the tag and GitHub Release.
-3. **`detect-app` / `ipa`** — builds and attaches the unsigned IPA. See [Shipping the app](#shipping-the-app) below.
+1. **`version`** — computes the next version and gates the workflow on `workflow_run.conclusion == 'success'`.
+2. **`detect-app`** — looks for an app target.
+3. **`ipa`** — builds the unsigned IPA and uploads it as a workflow artifact.
+4. **`publish`** — creates the tag and GitHub release with the binary attached, then commits the changelog.
+5. **`source`** — regenerates the Feather manifest.
+
+**Nothing durable happens until the build has already succeeded.** The tag, the release, the attached binary and the changelog are all written by the last job, in that order. A failed IPA build now means no release happened at all, rather than a tagged version nobody can install with a changelog entry describing it.
+
+Within `publish` the release is created *before* the changelog is pushed, because a changelog entry for a release that was never created is worse than a release whose changelog entry landed a moment later. The tag targets the tested commit rather than the changelog commit.
+
+> **There is deliberately no second test run.** This workflow used to re-run `swift test` before publishing, on the reasoning that a red build must never ship. Once it became triggered *by* CI and checked out the very commit CI tested, that stopped being a second opinion and became a second chance to flake — and it did: CI passed and this workflow failed the identical command on the identical commit, losing a release to a race inside a test. Its coverage was a strict subset of CI's, which tests on both platforms and fails on new warnings.
+>
+> The consequence is worth stating, because it is the reason this is safe. Everything lands directly on `main`, so a commit whose release failed stays there and is carried into the next successful release. That is only acceptable if "CI green, Release red" cannot mean "the code is bad" — and now it cannot, because the only checks Release performs are the build and the publish itself. A genuine build failure fails CI too, on that push and on every push after it, so no further release can happen until it is fixed.
 
 > **Why the trigger changed.** The two workflows used to fire in parallel on the same push, so CI's verdict arrived too late to stop anything. On `809ab1f` a `var` that should have been `let` failed the warnings gate — CI went red on three jobs, including the iOS build — while Release, which does not set warnings-as-errors, sailed through and shipped v0.16.0 with a refreshed Feather manifest. Nothing was broken for users, but the gate had been decorative rather than load-bearing, and the failure only surfaced because someone went looking.
 >

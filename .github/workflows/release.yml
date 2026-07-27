@@ -36,30 +36,21 @@ permissions:
   contents: write
 
 jobs:
-  verify:
-    name: Verify
+  version:
+    name: Compute version
     # Everything downstream needs this job, so one condition gates the workflow.
     # A manual dispatch has no triggering run and is trusted deliberately — it
     # is how a release is cut when CI is stuck.
+    #
+    # There is deliberately no second test run here. Release is triggered by CI
+    # succeeding and checks out the very commit CI tested, so re-running the
+    # suite adds no information and one more chance to flake — which is exactly
+    # what happened: CI passed and this workflow failed the identical `swift
+    # test` on the identical commit, and the release was lost to a race in a
+    # test rather than to anything wrong with the code.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
-    container: swift:6.0.3
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
-      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      # Kept even though CI now gates this workflow: CI's verdict is about the
-      # commit it tested, and this re-runs against the commit being published.
-      # Cheap insurance against the two drifting apart.
-      - name: Test
-        run: swift test
-
-  publish:
-    name: Publish
-    needs: verify
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -88,21 +79,11 @@ jobs:
             echo "version=$version" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate release notes
-        if: steps.version.outputs.released == 'true'
-        run: |
-          set -euo pipefail
-          scripts/release-notes.sh "${{ steps.version.outputs.version }}" > RELEASE_NOTES.md
-          cat RELEASE_NOTES.md
-
       - name: Summary
-        if: always()
         run: |
           {
             if [[ "${{ steps.version.outputs.released }}" == "true" ]]; then
               echo "### Releasing v${{ steps.version.outputs.version }}"
-              echo
-              cat RELEASE_NOTES.md
             else
               echo "### No release"
               echo
@@ -110,50 +91,10 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Update CHANGELOG
-        if: steps.version.outputs.released == 'true' && inputs.dry_run != true
-        run: |
-          set -euo pipefail
-          touch CHANGELOG.md
-          {
-            echo "# Changelog"
-            echo
-            cat RELEASE_NOTES.md
-            echo
-            # Prior entries, minus the old top-level heading and the blank lines
-            # that would otherwise pile up at the seam.
-            sed '/^# Changelog$/d' CHANGELOG.md | sed '/./,$!d'
-          } > CHANGELOG.new
-          mv CHANGELOG.new CHANGELOG.md
-
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          if git diff --cached --quiet; then
-            echo "CHANGELOG unchanged."
-          else
-            # [skip ci] stops this commit from re-triggering the release.
-            git commit -m "docs: update changelog for v${{ steps.version.outputs.version }} [skip ci]"
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          fi
-
-      - name: Create GitHub release
-        if: steps.version.outputs.released == 'true' && inputs.dry_run != true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          version="${{ steps.version.outputs.version }}"
-          gh release create "v${version}" \
-            --title "v${version}" \
-            --notes-file RELEASE_NOTES.md \
-            --target "$(git rev-parse HEAD)"
-
   detect-app:
     name: Detect app target
-    needs: publish
-    if: needs.publish.outputs.released == 'true'
+    needs: version
+    if: needs.version.outputs.released == 'true'
     runs-on: ubuntu-latest
     outputs:
       has_app: ${{ steps.check.outputs.has_app }}
@@ -173,19 +114,22 @@ jobs:
           fi
 
   ipa:
-    # Dormant until an iOS app target exists; wired now so it activates on its
-    # own once one lands.
+    # Built BEFORE anything is published, and uploaded as a workflow artifact
+    # rather than attached to a release that does not exist yet.
     #
-    # The IPA is built UNSIGNED on purpose. Distribution is via Feather using
-    # the developer's own certificate, which signs on-device — so no signing
+    # The old order tagged the version and created the release first, so a
+    # failed build left a version nobody could install and a changelog entry
+    # for it, with nothing to roll back automatically. Now a build failure
+    # simply means no release happened.
+    #
+    # The IPA is UNSIGNED on purpose. Distribution is via Feather using the
+    # developer's own certificate, which signs on-device — so no signing
     # identity, provisioning profile, or p12 ever needs to live in GitHub
     # secrets. That is both simpler and a smaller blast radius than signing here.
     name: Build unsigned IPA
-    needs: [publish, detect-app]
+    needs: [version, detect-app]
     if: needs.detect-app.outputs.has_app == 'true'
     runs-on: macos-15
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -209,36 +153,121 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            MARKETING_VERSION="${{ needs.publish.outputs.version }}" \
+            MARKETING_VERSION="${{ needs.version.outputs.version }}" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}"
 
       - name: Package IPA
-        # An .ipa is just a zip with the .app inside a Payload directory. Built
-        # unsigned deliberately: Feather signs on-device with the developer's own
-        # certificate, so no signing identity is needed here.
+        # An .ipa is just a zip with the .app inside a Payload directory.
         run: |
           set -euo pipefail
           mkdir -p Payload
           cp -R build/App.xcarchive/Products/Applications/*.app Payload/
-          zip -qry "Kobold-${{ needs.publish.outputs.version }}-unsigned.ipa" Payload
-          ls -lh "Kobold-${{ needs.publish.outputs.version }}-unsigned.ipa"
+          zip -qry "Kobold-${{ needs.version.outputs.version }}-unsigned.ipa" Payload
+          ls -lh "Kobold-${{ needs.version.outputs.version }}-unsigned.ipa"
 
-      - name: Attach to release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ipa
+          path: Kobold-*.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    # The only job that writes anything durable: the tag, the GitHub release,
+    # the changelog commit and the attached binary, in that order and only
+    # once every part of the build has already succeeded.
+    name: Publish
+    needs: [version, detect-app, ipa]
+    # `always()` so a skipped `ipa` (no app target yet) does not skip this too,
+    # combined with explicit failure checks so a *failed* build does.
+    if: >-
+      always()
+      && needs.version.outputs.released == 'true'
+      && needs.detect-app.result != 'failure'
+      && needs.ipa.result != 'failure'
+      && needs.ipa.result != 'cancelled'
+      && inputs.dry_run != true
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Download the IPA
+        if: needs.detect-app.outputs.has_app == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: ipa
+
+      # Regenerated rather than passed between jobs: this checkout has the same
+      # commit and the same history, so the notes are identical and there is
+      # one less thing to keep in step.
+      - name: Generate release notes
         run: |
-          gh release upload "v${{ needs.publish.outputs.version }}" \
-            "Kobold-${{ needs.publish.outputs.version }}-unsigned.ipa" --clobber
+          set -euo pipefail
+          scripts/release-notes.sh "${{ needs.version.outputs.version }}" > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: Create GitHub release
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          # Created before the changelog is pushed. If this step fails there is
+          # simply no release; the other order leaves a changelog entry
+          # describing a version that does not exist.
+          #
+          # The binary goes up with the release rather than after it, so the
+          # release never exists in an uninstallable state.
+          if [[ "${{ needs.detect-app.outputs.has_app }}" == "true" ]]; then
+            gh release create "v${version}" \
+              --title "v${version}" \
+              --notes-file RELEASE_NOTES.md \
+              --target "$(git rev-parse HEAD)" \
+              "Kobold-${version}-unsigned.ipa"
+          else
+            gh release create "v${version}" \
+              --title "v${version}" \
+              --notes-file RELEASE_NOTES.md \
+              --target "$(git rev-parse HEAD)"
+          fi
+
+      - name: Update CHANGELOG
+        run: |
+          set -euo pipefail
+          touch CHANGELOG.md
+          {
+            echo "# Changelog"
+            echo
+            cat RELEASE_NOTES.md
+            echo
+            # Prior entries, minus the old top-level heading and the blank lines
+            # that would otherwise pile up at the seam.
+            sed '/^# Changelog$/d' CHANGELOG.md | sed '/./,$!d'
+          } > CHANGELOG.new
+          mv CHANGELOG.new CHANGELOG.md
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "CHANGELOG unchanged."
+          else
+            # [skip ci] stops this commit from re-triggering the release.
+            git commit -m "docs: update changelog for v${{ needs.version.outputs.version }} [skip ci]"
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
 
   source:
     # Regenerates the Feather/AltStore source manifest from the published
     # releases and commits it back, so the subscribed URL always reflects what
     # is actually installable.
-    #
-    # always() because the IPA job is skipped until an app target exists, and a
-    # skipped dependency would otherwise skip this too — the manifest still
-    # needs to stay valid and current in the meantime.
     name: Update Feather source
-    needs: [publish, detect-app, ipa]
-    if: always() && needs.publish.outputs.released == 'true'
+    needs: publish
+    if: needs.publish.result == 'success'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
