@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.21.0
+
+### Features
+
+- a diagnostics screen for what does not belong on the dashboard (`8ee76ba`)
+
+**Full changelog:** `v0.20.0...v0.21.0`
+
 ## v0.20.0
 
 ### Features
