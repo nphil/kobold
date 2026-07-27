@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.20.0
+
+### Features
+
+- decode signed values, and three more of the car's PIDs (`a8482e6`)
+
+**Full changelog:** `v0.19.0...v0.20.0`
+
 ## v0.19.0
 
 ### Features
