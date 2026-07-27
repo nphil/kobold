@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.23.2",
+          "date": "2026-07-27",
+          "localizedDescription": "## v0.23.2\n\n### Fixes\n\n- stop appending the response-count digit by default (`84d7886`)\n\n### Build & CI\n\n- publish nothing until the build has already succeeded (`2d14553`)\n\n**Full changelog:** `v0.23.1...v0.23.2`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.23.2/Kobold-0.23.2-unsigned.ipa",
+          "size": 900550,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.23.1",
           "date": "2026-07-27",
           "localizedDescription": "## v0.23.1\n\n### Fixes\n\n- identify a stale reply by when it arrived, not by a count (`740ece6`)\n\n**Full changelog:** `v0.23.0...v0.23.1`",
