@@ -185,6 +185,15 @@ struct VehicleDiagnosticsView: View {
                         .foregroundStyle(theme.caution)
                 }
 
+                if !model.oxygenSensors.isEmpty {
+                    row("Oxygen Sensors", model.oxygenSensors.joined(separator: ", "))
+                }
+
+                if let drive = model.driveCycleReadiness, !drive.applicable.isEmpty {
+                    row("Complete this drive",
+                        "\(drive.applicable.filter(\.complete).count) of \(drive.applicable.count)")
+                }
+
                 ForEach(readiness.applicable) { monitor in
                     HStack {
                         Text(monitor.name)

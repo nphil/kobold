@@ -116,6 +116,21 @@ final class VehicleCapabilityTests: XCTestCase {
         XCTAssertEqual(capability.name(for: .rpm), "Engine RPM")
     }
 
+    /// PIDs the diagnostics screen reads are covered, not missing. Reporting
+    /// them as gaps sent someone hunting for data the app already showed them.
+    func testDiagnosticsPIDsCountAsCoveredRatherThanMissing() throws {
+        // 0C decodes as a signal; 01 and 51 are read on Diagnostics; 70 is a
+        // genuine gap.
+        let capability = VehicleCapability(supported: [0x0C, 0x01, 0x51, 0x70],
+                                           profile: try profile())
+
+        XCTAssertEqual(capability.readElsewhere.map(\.pid), [0x01, 0x51])
+        XCTAssertEqual(capability.gaps.map(\.pid), [0x70], "only the real gap remains")
+        XCTAssertEqual(capability.coveredCount, 3, "one signal plus two on Diagnostics")
+        XCTAssertEqual(capability.supportedCount, 4)
+        XCTAssertEqual(capability.coverage, 0.75, accuracy: 0.001)
+    }
+
     func testGapsGroupByCategory() throws {
         // Picks its own examples rather than naming PIDs. Hard-coded ones keep
         // becoming decoded as the profile grows, and the test then fails for a
@@ -126,6 +141,7 @@ final class VehicleCapabilityTests: XCTestCase {
             try XCTUnwrap((UInt8(1)...UInt8(0xA9)).first { pid in
                 !decodable.contains(pid)
                     && !StandardPIDCatalogue.isBankSelector(pid)
+                    && !DiagnosticPIDs.handled.contains(pid)
                     && StandardPIDCatalogue.entry(for: pid)?.category == category
             }, "no undecoded \(category.label) PID left to test with")
         }

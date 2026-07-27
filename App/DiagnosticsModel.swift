@@ -26,6 +26,8 @@ final class DiagnosticsModel {
     private(set) var pendingCodes: [String] = []
     private(set) var permanentCodes: [String] = []
     private(set) var readiness: ReadinessReport?
+    private(set) var driveCycleReadiness: ReadinessReport?
+    private(set) var oxygenSensors: [String] = []
     private(set) var fuelSystemStatus: [String] = []
     private(set) var fuelType: String?
     private(set) var obdStandard: String?
@@ -57,6 +59,13 @@ final class DiagnosticsModel {
 
         readiness = await raw(from: driver, pid: 0x01, label: "readiness")
             .flatMap(ReadinessReport.init(data:))
+        // Same decoder, different question: 01 is "since codes were cleared",
+        // 41 is "on this drive". A monitor that has run today is stronger
+        // evidence a repair held than one that ran at some point since a reset.
+        driveCycleReadiness = await raw(from: driver, pid: 0x41, label: "drive-cycle readiness")
+            .flatMap(ReadinessReport.init(data:))
+        oxygenSensors = await raw(from: driver, pid: 0x13, label: "oxygen sensors present")
+            .flatMap(\.first).map(StatusPID.oxygenSensorsPresent) ?? []
 
         if let bytes = await raw(from: driver, pid: 0x03, label: "fuel system status") {
             fuelSystemStatus = bytes.prefix(2).compactMap(StatusPID.fuelSystemStatus)
@@ -87,6 +96,8 @@ final class DiagnosticsModel {
         pendingCodes = []
         permanentCodes = []
         readiness = nil
+        driveCycleReadiness = nil
+        oxygenSensors = []
         fuelSystemStatus = []
         fuelType = nil
         obdStandard = nil

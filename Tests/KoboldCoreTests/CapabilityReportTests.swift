@@ -30,9 +30,9 @@ final class CapabilityReportTests: XCTestCase {
     /// The gap list is the actionable half. It carries the command as well as
     /// the name so it can be looked up without the app in hand.
     func testListsGapsWithTheirCommandGroupedByCategory() throws {
-        // 0170 is a control this car has no sensor entry for and 0113 is a
-        // bitfield, so both stay gaps as the numeric catalogue grows.
-        let capability = VehicleCapability(supported: [0x0C, 0x70, 0x13],
+        // 0170 is a control with no sensor entry and 019E has no published
+        // formula, so both stay gaps as the catalogue grows.
+        let capability = VehicleCapability(supported: [0x0C, 0x70, 0x9E],
                                            profile: try profile())
         let text = report(capability)
 

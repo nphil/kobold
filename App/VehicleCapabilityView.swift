@@ -51,6 +51,18 @@ struct VehicleCapabilityView: View {
                     .listRowBackground(Color.clear)
             }
 
+            if !capability.readElsewhere.isEmpty {
+                Section {
+                    ForEach(capability.readElsewhere) { entry in
+                        gapRow(name: entry.name, command: entry.command)
+                    }
+                } header: {
+                    sectionHeader("Read on Diagnostics", symbol: "stethoscope")
+                } footer: {
+                    Text("States and flag sets rather than measurements, so they are read on the Diagnostics screen instead of polled as gauges. They count as covered — the app is not missing them.")
+                }
+            }
+
             // Gaps first. The decoded list is reassurance; the gap list is the
             // only part anyone can act on, so it does not sit below a scroll.
             ForEach(capability.gapsByCategory) { group in
@@ -151,7 +163,7 @@ struct VehicleCapabilityView: View {
                 .foregroundStyle(theme.textTertiary)
 
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(capability.readable.count)")
+                Text("\(capability.coveredCount)")
                     .font(.system(size: 40, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(theme.accent)
@@ -179,7 +191,7 @@ struct VehicleCapabilityView: View {
         }
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(capability.readable.count) of \(capability.supportedCount) reported readings decoded")
+        .accessibilityLabel("\(capability.coveredCount) of \(capability.supportedCount) reported readings decoded")
     }
 
     /// One sentence, in plain words, saying whether anything is missing.

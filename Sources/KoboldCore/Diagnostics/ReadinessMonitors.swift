@@ -127,6 +127,17 @@ public enum StatusPID {
         return names[Int(byte)]
     }
 
+    /// Mode 01 PID `13`. One bit per sensor location.
+    ///
+    /// Bit 0 is Bank 1 Sensor 1, counting up through that bank before moving to
+    /// the next — sensor 1 being the one closest to the engine.
+    public static func oxygenSensorsPresent(_ byte: UInt8) -> [String] {
+        (0..<8).compactMap { bit in
+            guard byte & (1 << UInt8(bit)) != 0 else { return nil }
+            return "Bank \(bit / 4 + 1) Sensor \(bit % 4 + 1)"
+        }
+    }
+
     /// Mode 01 PID `1C`. Only the values a road car is likely to report are
     /// named; the rest are heavy-duty and regional variants.
     public static func obdStandard(_ byte: UInt8) -> String {
@@ -147,4 +158,24 @@ public enum StatusPID {
         default: return String(format: "Standard 0x%02X", byte)
         }
     }
+}
+
+/// Standard PIDs the app reads outside the signal pipeline.
+///
+/// These are states and flag sets, not measurements, so they are read on the
+/// diagnostics screen rather than polled as gauges. They still need to be
+/// counted as covered: a coverage report that lists them as missing is telling
+/// someone to go and find data the app is already showing them one screen away.
+public enum DiagnosticPIDs {
+    public static let handled: Set<UInt8> = [
+        0x01,  // Monitor status since codes cleared
+        0x03,  // Fuel system status
+        0x13,  // Oxygen sensors present
+        0x1C,  // OBD standard conformance
+        0x41,  // Monitor status this drive cycle
+        0x51,  // Fuel type
+    ]
+
+    /// Where to tell someone to look.
+    public static let surface = "Diagnostics"
 }

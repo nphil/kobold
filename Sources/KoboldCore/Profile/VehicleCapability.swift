@@ -24,11 +24,22 @@ public struct VehicleCapability: Sendable, Equatable {
     /// PIDs the car reports that Kobold cannot decode yet — the actionable list.
     public let gaps: [Gap]
 
+    /// PIDs the app reads, but on the diagnostics screen rather than as gauges.
+    ///
+    /// Counted as covered, listed apart. They were being reported as gaps,
+    /// which told someone to go and find data the app was already showing them
+    /// one screen away — the report measuring the signal pipeline and calling
+    /// it the app.
+    public let readElsewhere: [Gap]
+
     /// Signals defined for this vehicle that its ECUs did not declare. Usually
     /// a profile written optimistically, or a trim that lacks a sensor.
     public let undeclared: [SignalID]
 
-    public var supportedCount: Int { readable.count + gaps.count }
+    public var supportedCount: Int { readable.count + readElsewhere.count + gaps.count }
+
+    /// Everything the app can show, wherever it shows it.
+    public var coveredCount: Int { readable.count + readElsewhere.count }
 
     /// Vehicle-information readings the car publishes, from the Mode 09 bitmask.
     ///
@@ -127,14 +138,23 @@ public struct VehicleCapability: Sendable, Equatable {
             .compactMap { decodableByPID[$0] }
             .sorted { $0.rawValue < $1.rawValue }
 
-        gaps = realPIDs
-            .filter { decodableByPID[$0] == nil }
-            .map { pid in
-                let entry = StandardPIDCatalogue.entry(for: pid)
-                return Gap(pid: pid,
-                           name: entry?.name ?? StandardPIDCatalogue.name(for: pid),
-                           category: entry?.category ?? .other)
-            }
+        func describe(_ pid: UInt8) -> Gap {
+            let entry = StandardPIDCatalogue.entry(for: pid)
+            return Gap(pid: pid,
+                       name: entry?.name ?? StandardPIDCatalogue.name(for: pid),
+                       category: entry?.category ?? .other)
+        }
+
+        let undecoded = realPIDs.filter { decodableByPID[$0] == nil }
+
+        readElsewhere = undecoded
+            .filter(DiagnosticPIDs.handled.contains)
+            .map(describe)
+            .sorted { $0.pid < $1.pid }
+
+        gaps = undecoded
+            .filter { !DiagnosticPIDs.handled.contains($0) }
+            .map(describe)
             .sorted { $0.pid < $1.pid }
 
         undeclared = mode01Signals
@@ -153,7 +173,7 @@ public struct VehicleCapability: Sendable, Equatable {
     /// answers it.
     public var coverage: Double {
         guard supportedCount > 0 else { return 0 }
-        return Double(readable.count) / Double(supportedCount)
+        return Double(coveredCount) / Double(supportedCount)
     }
 
     /// Gaps grouped for display. A named type rather than a tuple because Swift

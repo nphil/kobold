@@ -23,12 +23,17 @@ public enum CapabilityReport {
         var lines: [String] = ["Vehicle report · \(profileName)"]
 
         let percent = Int((capability.coverage * 100).rounded())
-        lines.append("Coverage: \(capability.readable.count) of \(capability.supportedCount) "
+        lines.append("Coverage: \(capability.coveredCount) of \(capability.supportedCount) "
                      + "reported PIDs decoded (\(percent)%)")
 
         if !capability.readable.isEmpty {
             let names = capability.readable.map { capability.name(for: $0) }.sorted()
             lines += wrapped("Decoded (\(names.count))", names)
+        }
+
+        if !capability.readElsewhere.isEmpty {
+            let entries = capability.readElsewhere.map { "\($0.command) \($0.name)" }
+            lines += wrapped("On \(DiagnosticPIDs.surface) (\(entries.count))", entries)
         }
 
         // Grouped by category, which mirrors the screen and breaks the longest
