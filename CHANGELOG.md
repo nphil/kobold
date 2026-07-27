@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.0
+
+### Features
+
+- report what the car supports against what Kobold decodes (`3e1db00`)
+
+**Full changelog:** `v0.14.1...v0.15.0`
+
 ## v0.14.1
 
 ### Fixes
