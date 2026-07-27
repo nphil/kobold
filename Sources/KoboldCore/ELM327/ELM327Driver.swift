@@ -63,6 +63,8 @@ public actor ELM327Driver {
     // Async gate serialising command execution.
     private var isBusy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
+    /// Times a caller has queued behind another since the count was last taken.
+    private var queued = 0
 
     public private(set) var phase: ConnectionPhase = .disconnected
     /// Protocol number reported by `ATDPN`, once known.
@@ -812,11 +814,25 @@ public actor ELM327Driver {
 
     private func acquire() async {
         while isBusy {
+            queued += 1
             await withCheckedContinuation { continuation in
                 waiters.append(continuation)
             }
         }
         isBusy = true
+    }
+
+    /// How many times a caller has had to wait for the adapter since this was
+    /// last asked, and resets the count.
+    ///
+    /// Exists so a throughput of 0.0 val/s can be told apart from a broken
+    /// connection. A diagnostics read or a deep scan holds the adapter for its
+    /// whole run, and the dashboard's poll loop correctly stalls behind it —
+    /// but the log said only "0.0 val/s", which reads as a fault and sent an
+    /// afternoon into diagnosing one that was not there.
+    public func takeContentionCount() -> Int {
+        defer { queued = 0 }
+        return queued
     }
 
     private func release() {

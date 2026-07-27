@@ -414,8 +414,10 @@ final class SessionModel {
                     lastRateReport = now
                     let hints = await driver.responseCountHints
                     let enabled = await driver.usesResponseCounts
+                    let contended = await driver.takeContentionCount()
                     await reportThroughput(hints: hints, enabled: enabled, rate: rate,
                                            signals: definitions.count,
+                                           contended: contended,
                                            generation: generation)
                 }
             }
@@ -541,6 +543,7 @@ final class SessionModel {
                                   enabled: Bool,
                                   rate: Double,
                                   signals: Int,
+                                  contended: Int,
                                   generation: Int) {
         guard isCurrent(generation) else { return }
 
@@ -553,8 +556,15 @@ final class SessionModel {
         } else {
             state = "response-count hints on \(hints.count) of \(signals) commands"
         }
+        // Said explicitly, because a rate near zero is the same line whether the
+        // connection has died or a diagnostics read is simply holding the
+        // adapter — and only one of those is worth investigating.
+        let sharing = contended > 0
+            ? "; waited for the adapter \(contended)× (another screen was using it)"
+            : ""
         Log.info(.session, String(format: "Throughput: %.1f val/s across %d signals "
-                                  + "(%.1f/s each) — %@", rate, signals, perSignal, state))
+                                  + "(%.1f/s each) — %@%@",
+                                  rate, signals, perSignal, state, sharing))
     }
 
     /// Records the transport a run owns so `stop()` can tear it down.
