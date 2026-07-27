@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.22.0
+
+### Features
+
+- search modules for undocumented data identifiers (`8da6936`)
+
+### Fixes
+
+- correct two concurrency errors in the scanner, and catch them locally (`669d68c`)
+
+**Full changelog:** `v0.21.0...v0.22.0`
+
 ## v0.21.0
 
 ### Features
