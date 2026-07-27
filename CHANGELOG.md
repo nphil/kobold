@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.1
+
+### Fixes
+
+- correct the fuel-pressure entries and document long-crank diagnosis (`e79f278`)
+
+**Full changelog:** `v0.15.0...v0.15.1`
+
 ## v0.15.0
 
 ### Features
