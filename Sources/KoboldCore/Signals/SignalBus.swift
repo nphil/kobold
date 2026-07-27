@@ -133,6 +133,15 @@ public final class SignalBus {
     public private(set) var profileID: String
     public private(set) var profileName: String
 
+    /// Bumped whenever the signal set changes.
+    ///
+    /// Observed rather than `availableSignals` itself: the backing store is
+    /// deliberately outside observation, so a view that needs to know the
+    /// vehicle's signal set has changed has nothing else to watch. Narrowing to
+    /// what the car actually supports happens after connecting, which is after
+    /// the dashboard has already built its layout.
+    public private(set) var revision: Int = 0
+
     public init(profile: ResolvedProfile) {
         self.profileID = profile.id
         self.profileName = profile.displayName
@@ -140,6 +149,7 @@ public final class SignalBus {
     }
 
     private func load(profile: ResolvedProfile) {
+        revision &+= 1
         signals.removeAll()
         derived.removeAll()
         dependents.removeAll()

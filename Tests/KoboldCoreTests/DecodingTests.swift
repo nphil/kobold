@@ -256,6 +256,25 @@ final class SupportedPIDDecoderTests: XCTestCase {
     func testShortPayloadYieldsNothing() {
         XCTAssertTrue(SupportedPIDDecoder.supportedPIDs(from: [0x80, 0x00], base: 0).isEmpty)
     }
+
+    /// The demo vehicle's declared bitmask, pinned here because it lives in the
+    /// app target where nothing can test it — and because a bitmask that
+    /// overstates what a car answers is exactly the bug this app now hides
+    /// signals to avoid. Hand-computing these bytes has gone wrong before.
+    func testDemoVehicleBitmaskMatchesWhatItAnswers() {
+        var declared: Set<UInt8> = []
+        declared.formUnion(SupportedPIDDecoder.supportedPIDs(from: [0x18, 0x3A, 0x80, 0x01],
+                                                             base: 0x00))
+        declared.formUnion(SupportedPIDDecoder.supportedPIDs(from: [0x00, 0x00, 0x20, 0x01],
+                                                             base: 0x20))
+        declared.formUnion(SupportedPIDDecoder.supportedPIDs(from: [0x40, 0x00, 0x00, 0x00],
+                                                             base: 0x40))
+
+        // Every PID `DemoVehicle.fixture()` has a reply for, and the bank
+        // selectors that make the higher banks reachable.
+        let answered: Set<UInt8> = [0x04, 0x05, 0x0B, 0x0C, 0x0D, 0x0F, 0x11, 0x33, 0x42]
+        XCTAssertEqual(declared, answered.union([0x20, 0x40]))
+    }
 }
 
 final class DTCDecoderTests: XCTestCase {

@@ -81,7 +81,13 @@ struct DemoVehicle {
             "ATH1":  ["OK"],
             "ATSP0": ["OK"],
             "ATDPN": ["6"],
-            "0100":  ["7E8 06 41 00 BE 3E B8 11"],
+            // Declares exactly what this fixture answers and nothing more. The
+            // app hides signals a car does not report, so a bitmask claiming
+            // PIDs the demo has no reply for would put permanently blank cards
+            // in the picker — the same bug, just in a car that does not exist.
+            "0100":  ["7E8 06 41 00 18 3A 80 01"],
+            "0120":  ["7E8 06 41 20 00 00 20 01"],
+            "0140":  ["7E8 06 41 40 40 00 00 00"],
             "03":    ["7E8 02 43 00"],
         ]
 

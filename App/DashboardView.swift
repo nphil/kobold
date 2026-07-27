@@ -86,6 +86,11 @@ struct DashboardView: View {
         }
         .preferredColorScheme(.dark)
         .task { loadLayout() }
+        // The car narrows the signal set partway through connecting, long after
+        // this view built its layout. Without this, a card for something the
+        // vehicle turned out not to report would stay on screen for the whole
+        // session, permanently blank.
+        .onChange(of: session.bus.revision) { loadLayout() }
     }
 
     // MARK: - Layout
@@ -107,16 +112,28 @@ struct DashboardView: View {
 
         // Resolved against the car every time, not just on first load: a layout
         // outlives the vehicle it was built on, and a card bound to a signal
-        // this profile lacks would sit there as a permanent dash.
+        // this profile lacks would sit there as a permanent dash. The signal set
+        // also narrows mid-session, once the car reports what it supports.
         if let stored = DashboardLayout.decoded(from: storedLayout), !stored.isEmpty {
             layout = stored.resolved(against: available)
         } else {
             layout = DashboardLayout.standard(available: available)
         }
+        syncRequests()
     }
 
     private func persist() {
         storedLayout = (try? layout.encoded()) ?? Data()
+        syncRequests()
+    }
+
+    /// Tells the session to poll exactly what is on screen.
+    ///
+    /// The dashboard is the only place that knows which readings are being
+    /// looked at, so it is the only place that can answer this. Keeping the two
+    /// in step is also what stops a freshly added card from sitting blank.
+    private func syncRequests() {
+        session.request(layout.signals)
     }
 
     private func presentationBinding(for card: DashboardCard) -> Binding<DashboardCard.Presentation> {

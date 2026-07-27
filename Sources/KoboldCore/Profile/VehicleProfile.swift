@@ -245,4 +245,65 @@ public struct ResolvedProfile: Sendable, Equatable {
     }
 
     public func definition(for id: SignalID) -> SignalDefinition? { signals[id] }
+
+    /// The profile as it applies to a car that reported these standard PIDs.
+    ///
+    /// A signal the vehicle has told us it does not implement is not a signal
+    /// with no data — it is not a signal on this car at all, and it has no
+    /// business appearing in a picker, a default layout or a gauge. Dropping it
+    /// here rather than at each view means every surface inherits the same
+    /// answer instead of each remembering to filter.
+    ///
+    /// What survives:
+    ///
+    /// - Signals outside Mode 01. The bitmask enumerates standard PIDs and says
+    ///   nothing whatever about manufacturer modes, so silence about a Mode 22
+    ///   signal is not a "no".
+    /// - Mode 01 signals whose PID cannot be parsed. Refusing to show one is a
+    ///   stronger claim than malformed profile data supports.
+    ///
+    /// Dropped signals move to `knownAbsent`, which already means exactly this,
+    /// so nothing is lost silently and the reason survives with the fact.
+    public func restricted(toReportedPIDs reported: Set<UInt8>) -> ResolvedProfile {
+        // Deliberately delegated rather than reimplemented: "is this PID
+        // supported" is one rule with three careful exceptions, and having a
+        // second copy of it is how the poll list and the picker drift apart.
+        let split = SupportedSignals.partition(signals.map { ($0.key, $0.value) },
+                                               supported: reported)
+
+        var keptSignals = Dictionary(uniqueKeysWithValues: split.supported)
+        var absent = knownAbsent
+
+        for id in split.unsupported {
+            let command = signals[id]?.command ?? id.rawValue
+            absent[id] = "This vehicle did not list \(command) among the standard PIDs "
+                + "it supports."
+        }
+
+        // A derived signal is only as real as its inputs. Boost computed from a
+        // manifold pressure this car does not report would be a number with
+        // nothing behind it, which is worse than an absence.
+        //
+        // Iterated to a fixed point because one derived signal may read another.
+        var keptDerived = derivedSignals
+        var settled = false
+        while !settled {
+            settled = true
+            for (id, definition) in keptDerived {
+                let satisfied = definition.dependencies.allSatisfy {
+                    keptSignals[$0] != nil || keptDerived[$0] != nil
+                }
+                guard !satisfied else { continue }
+                keptDerived.removeValue(forKey: id)
+                absent[id] = "Computed from readings this vehicle does not report."
+                settled = false
+            }
+        }
+
+        return ResolvedProfile(id: id,
+                               displayName: displayName,
+                               signals: keptSignals,
+                               derivedSignals: keptDerived,
+                               knownAbsent: absent)
+    }
 }

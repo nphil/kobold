@@ -72,9 +72,23 @@ final class SessionModel {
     private(set) var capability: VehicleCapability?
 
     /// Signals the dashboard wants, in priority order.
-    var requested: [SignalID] = [.rpm, .speed, .map, .baro, .coolantTemp, .oilTemp, .throttle, .moduleVoltage]
+    ///
+    /// Set by the dashboard from its own layout rather than fixed here. A card
+    /// nobody can see costs a round trip on every pass, and — worse — a card
+    /// somebody *can* see that was never on this list sat blank forever.
+    private(set) var requested: [SignalID] = []
 
+    /// The full profile for this vehicle, before the car has had its say.
+    ///
+    /// Kept alongside `activeProfile` because the capability report needs to
+    /// know what Kobold defines *and* what the car answered; narrowing this one
+    /// would make the two halves the same and the report empty.
     private let profile: ResolvedProfile
+
+    /// The profile as it applies to this particular car — the full profile
+    /// until the supported-PID bitmask says otherwise. Everything the UI offers
+    /// comes from here.
+    private var activeProfile: ResolvedProfile
     private var runTask: Task<Void, Never>?
 
     /// Incremented by `stop()`. Every write into this model carries the
@@ -106,6 +120,7 @@ final class SessionModel {
             }
         }
         profile = resolved
+        activeProfile = resolved
         profileName = resolved.displayName
         bus = SignalBus(profile: resolved)
         Log.info(.session, "Profile resolved: \(resolved.displayName)")
@@ -117,11 +132,10 @@ final class SessionModel {
         stop()
         lastError = nil
         source = .demo
-        let definitions = orderedDefinitions()
         let generation = self.generation
-        Log.info(.session, "Starting demo session with \(definitions.count) signals")
+        Log.info(.session, "Starting demo session with \(requested.count) signals")
         runTask = Task { [weak self] in
-            await self?.runDemo(definitions: definitions, generation: generation)
+            await self?.runDemo(generation: generation)
         }
     }
 
@@ -129,11 +143,10 @@ final class SessionModel {
         stop()
         lastError = nil
         source = .adapter("Searching…")
-        let definitions = orderedDefinitions()
         let generation = self.generation
         Log.info(.session, "Scanning for an adapter")
         runTask = Task { [weak self] in
-            await self?.runAdapter(definitions: definitions, generation: generation)
+            await self?.runAdapter(generation: generation)
         }
     }
 
@@ -160,9 +173,36 @@ final class SessionModel {
 
     private func orderedDefinitions() -> [(SignalID, SignalDefinition)] {
         requested.compactMap { id in
-            guard let definition = profile.definition(for: id) else { return nil }
+            guard let definition = activeProfile.definition(for: id) else { return nil }
             return (id, definition)
         }
+    }
+
+    /// Sets what to poll, in priority order.
+    ///
+    /// The dashboard is the authority: polling something nothing displays wastes
+    /// a round trip on every pass, and displaying something nothing polls is a
+    /// tile that never fills in. Ordering is kept because the loop reads in
+    /// order and the first card is the one being looked at.
+    func request(_ ids: [SignalID]) {
+        var wanted: [SignalID] = []
+        var seen: Set<SignalID> = []
+
+        // A derived signal is not itself readable — what has to be on the wire
+        // is whatever it computes from.
+        func add(_ id: SignalID) {
+            guard seen.insert(id).inserted else { return }
+            if let derived = activeProfile.derivedSignals[id] {
+                derived.dependencies.forEach(add)
+            } else if activeProfile.signals[id] != nil {
+                wanted.append(id)
+            }
+        }
+        ids.forEach(add)
+
+        guard wanted != requested else { return }
+        requested = wanted
+        Log.debug(.session, "Polling set is now \(wanted.map(\.rawValue).joined(separator: ", "))")
     }
 
     // MARK: - Off-main session bodies
@@ -170,8 +210,7 @@ final class SessionModel {
     // `nonisolated` so the body runs on the generic executor rather than
     // inheriting the main actor from the caller.
 
-    private nonisolated func runDemo(definitions: [(SignalID, SignalDefinition)],
-                                     generation: Int) async {
+    private nonisolated func runDemo(generation: Int) async {
         var vehicle = DemoVehicle()
         let transport = ReplayTransport(fixture: vehicle.fixture())
         let driver = ELM327Driver(transport: transport, descriptor: .generic)
@@ -187,8 +226,12 @@ final class SessionModel {
         await setPhase(.ready, generation: generation)
         Log.info(.session, "Demo session ready")
 
-        await pump(driver: driver, definitions: definitions, isDemo: true,
-                   generation: generation) { delta in
+        // The demo car answers the capability question like any other, so it
+        // gets narrowed like any other. Exempting it would mean the one mode
+        // anybody can try without a car is the one that shows dead signals.
+        await discoverCapability(using: driver, generation: generation)
+
+        await pump(driver: driver, isDemo: true, generation: generation) { delta in
             vehicle.advance(by: delta)
             await transport.update(fixture: vehicle.fixture())
         }
@@ -196,8 +239,7 @@ final class SessionModel {
         await driver.stop()
     }
 
-    private nonisolated func runAdapter(definitions: [(SignalID, SignalDefinition)],
-                                        generation: Int) async {
+    private nonisolated func runAdapter(generation: Int) async {
         let registry = AdapterRegistry()
 
         // Which adapter this is cannot be known until one answers, so scanning
@@ -261,11 +303,9 @@ final class SessionModel {
         // requesting PIDs that will never reply — every pass, forever. The
         // bitmask this reads is already implied by the 0100 reply that
         // negotiated the protocol a moment ago.
-        let active = await supportedSubset(of: definitions, using: driver,
-                                           generation: generation)
+        await discoverCapability(using: driver, generation: generation)
 
-        await pump(driver: driver, definitions: active, isDemo: false,
-                   generation: generation, tick: nil)
+        await pump(driver: driver, isDemo: false, generation: generation, tick: nil)
 
         await driver.stop()
     }
@@ -277,7 +317,6 @@ final class SessionModel {
     /// at a rate a display can actually use, and it means one actor hop per pass
     /// instead of one per signal.
     private nonisolated func pump(driver: ELM327Driver,
-                                  definitions: [(SignalID, SignalDefinition)],
                                   isDemo: Bool,
                                   generation: Int,
                                   tick: ((Double) async -> Void)?) async {
@@ -292,6 +331,16 @@ final class SessionModel {
             lastTime = passStart
 
             if let tick { await tick(max(0, delta)) }
+
+            // Re-read every pass rather than captured once, so adding a card in
+            // edit mode starts filling it in without dropping the connection.
+            let definitions = await activeDefinitions(generation: generation)
+            guard !definitions.isEmpty else {
+                // Nothing on the dashboard is not a failure to report — it is a
+                // dashboard with nothing on it.
+                try? await Task.sleep(for: .seconds(SessionTiming.publishInterval))
+                continue
+            }
 
             var batch: [(SignalID, Double)] = []
             batch.reserveCapacity(definitions.count)
@@ -396,6 +445,28 @@ final class SessionModel {
         let readable = capability?.readable.count ?? 0
         let total = capability?.supportedCount ?? 0
         Log.info(.session, "Vehicle reports \(total) standard PIDs; Kobold decodes \(readable)")
+
+        let narrowed = profile.restricted(toReportedPIDs: supported)
+
+        // A car that implements none of the profile's standard PIDs is far more
+        // likely to be a misread bitmask than a car with no sensors, and acting
+        // on it would empty the dashboard. Keep the full profile and say so.
+        guard !narrowed.signals.isEmpty else {
+            Log.warning(.session, "The bitmask claims this vehicle supports none of the "
+                        + "profile's signals, which is implausible; keeping all of them")
+            return
+        }
+
+        let dropped = profile.allSignalIDs.subtracting(narrowed.allSignalIDs)
+        guard !dropped.isEmpty else { return }
+
+        Log.info(.session, "Hiding \(dropped.count) signal(s) this vehicle does not report: "
+                 + dropped.map(\.rawValue).sorted().joined(separator: ", "))
+
+        activeProfile = narrowed
+        // Rebuilding the bus is what removes them from the picker, the default
+        // layout and every gauge — one narrowing, inherited everywhere.
+        bus.apply(profile: narrowed)
     }
 
     /// Records the transport a run owns so `stop()` can tear it down.
@@ -413,48 +484,32 @@ final class SessionModel {
 
     // MARK: - Supported signals
 
-    /// Narrows the requested signals to the ones this vehicle reports support
-    /// for, degrading to "poll everything" if the bitmask cannot be read.
+    /// Asks the car what it implements and narrows the app to that answer.
     ///
-    /// Degrading rather than failing is deliberate: not answering `0100`-style
-    /// queries is a quirk of some clones, and it says nothing about whether the
-    /// individual PIDs work. Being unable to ask is not evidence of a "no".
-    private nonisolated func supportedSubset(
-        of definitions: [(SignalID, SignalDefinition)],
-        using driver: ELM327Driver,
-        generation: Int
-    ) async -> [(SignalID, SignalDefinition)] {
-
-        // Recorded before filtering, so the capability screen can report the
-        // gap even when every requested signal happens to be supported.
+    /// Degrading to the full profile when the bitmask cannot be read is
+    /// deliberate: not answering `0100`-style queries is a quirk of some clones,
+    /// and it says nothing about whether the individual PIDs work. Being unable
+    /// to ask is not evidence of a "no".
+    private nonisolated func discoverCapability(using driver: ELM327Driver,
+                                                generation: Int) async {
         guard let supported = try? await driver.discoverSupportedPIDs() else {
-            Log.warning(.elm327, "Could not read the supported-PID bitmask; polling all "
-                        + "\(definitions.count) requested signals")
-            return definitions
+            Log.warning(.elm327, "Could not read the supported-PID bitmask; "
+                        + "keeping every signal the profile defines")
+            return
         }
 
-        // Recorded on the main actor, where the profile lives — the comparison
+        // Applied on the main actor, where the profile lives — the comparison
         // needs both halves and only one of them is available out here.
         await recordCapability(supported: supported, generation: generation)
+    }
 
-        let split = SupportedSignals.partition(definitions, supported: supported)
-
-        if !split.unsupported.isEmpty {
-            let names = split.unsupported.map(\.rawValue).sorted().joined(separator: ", ")
-            Log.info(.session, "Vehicle reports no support for: \(names)")
-        }
-
-        guard !split.supported.isEmpty else {
-            // Every requested signal unsupported is not a reason to poll
-            // nothing — far more likely the bitmask was misread than that the
-            // car implements none of the standard PIDs.
-            Log.warning(.session, "The bitmask claims none of the requested signals are "
-                        + "supported, which is implausible; polling all of them anyway")
-            return definitions
-        }
-
-        Log.info(.session, "Polling \(split.supported.count) of \(definitions.count) signals")
-        return split.supported
+    /// The signals to read this pass.
+    ///
+    /// Read per pass rather than captured at session start, so editing the
+    /// dashboard changes what goes on the wire without a reconnect.
+    private func activeDefinitions(generation: Int) -> [(SignalID, SignalDefinition)] {
+        guard isCurrent(generation) else { return [] }
+        return orderedDefinitions()
     }
 
     // MARK: - Diagnosing an empty session
