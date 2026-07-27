@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.24.0
+
+### Features
+
+- choose the chart window and the units from one menu (`99643c9`)
+
+### Documentation
+
+- update changelog for v0.23.3 [skip ci] (`9e7d91c`)
+
+**Full changelog:** `v0.23.3...v0.24.0`
+
 ## v0.23.3
 
 ### Fixes
