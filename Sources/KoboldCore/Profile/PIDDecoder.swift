@@ -55,12 +55,29 @@ public enum PIDDecoder {
 
         switch definition.conversion {
         case .linear(let linear):
-            return linear.apply(rawValue: Double(slice.bigEndianValue))
+            let raw = linear.signed
+                ? Self.signedValue(of: slice)
+                : Double(slice.bigEndianValue)
+            return linear.apply(rawValue: raw)
         case .bitfield:
             return Double(slice.bigEndianValue)
         case .ascii:
             throw DecodeError.notNumeric
         }
+    }
+
+    /// Reinterprets big-endian bytes as two's complement.
+    ///
+    /// Width comes from the slice, so the same code covers a one-byte value and
+    /// a four-byte one: anything with the top bit set is that many counts below
+    /// zero rather than a very large positive number.
+    static func signedValue(of slice: [UInt8]) -> Double {
+        guard let first = slice.first else { return 0 }
+        let magnitude = slice.bigEndianValue
+        guard first & 0x80 != 0 else { return Double(magnitude) }
+
+        let span = UInt64(1) << (UInt64(slice.count) * 8)
+        return Double(magnitude) - Double(span)
     }
 
     /// Decodes an ASCII payload (Mode 09 VIN and calibration IDs).

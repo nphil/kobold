@@ -34,15 +34,25 @@ public struct LinearConversion: Sendable, Equatable, Codable {
     public var divisor: Double
     public var offset: Double
     public var postOffset: Double
+    /// Whether the raw bytes are two's complement.
+    ///
+    /// A handful of readings are genuinely bipolar — evaporative system vapour
+    /// pressure runs either side of atmospheric — and the standard spells those
+    /// "signed" rather than giving them an offset. Read unsigned, `$FFFF`
+    /// becomes +16,383 Pa instead of −0.25, which is not a small error in the
+    /// wrong direction but a large one in the wrong direction.
+    public var signed: Bool
 
     public init(factor: Double = 1,
                 divisor: Double = 1,
                 offset: Double = 0,
-                postOffset: Double = 0) {
+                postOffset: Double = 0,
+                signed: Bool = false) {
         self.factor = factor
         self.divisor = divisor
         self.offset = offset
         self.postOffset = postOffset
+        self.signed = signed
     }
 
     public func apply(rawValue: Double) -> Double {
@@ -55,7 +65,7 @@ public struct LinearConversion: Sendable, Equatable, Codable {
 
 extension Conversion: Codable {
     private enum CodingKeys: String, CodingKey {
-        case kind, factor, divisor, offset, postOffset
+        case kind, factor, divisor, offset, postOffset, signed
     }
 
     private enum Kind: String, Codable {
@@ -76,7 +86,8 @@ extension Conversion: Codable {
                 factor: try container.decodeIfPresent(Double.self, forKey: .factor) ?? 1,
                 divisor: try container.decodeIfPresent(Double.self, forKey: .divisor) ?? 1,
                 offset: try container.decodeIfPresent(Double.self, forKey: .offset) ?? 0,
-                postOffset: try container.decodeIfPresent(Double.self, forKey: .postOffset) ?? 0
+                postOffset: try container.decodeIfPresent(Double.self, forKey: .postOffset) ?? 0,
+                signed: try container.decodeIfPresent(Bool.self, forKey: .signed) ?? false
             ))
         }
     }
@@ -94,6 +105,7 @@ extension Conversion: Codable {
             try container.encode(linear.divisor, forKey: .divisor)
             try container.encode(linear.offset, forKey: .offset)
             try container.encode(linear.postOffset, forKey: .postOffset)
+            try container.encode(linear.signed, forKey: .signed)
         }
     }
 }

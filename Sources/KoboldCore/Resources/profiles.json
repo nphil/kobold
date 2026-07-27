@@ -217,6 +217,42 @@
           "category": "engine"
         },
         {
+          "id": "evapPurge",
+          "label": "Commanded Evap Purge",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "2E",
+          "byteOffset": 0,
+          "byteCount": 1,
+          "conversion": {
+            "factor": 100,
+            "divisor": 255
+          },
+          "unit": "pct",
+          "minimum": 0,
+          "maximum": 100,
+          "summary": "How far open the evaporative purge valve is commanded, from no flow to maximum.",
+          "category": "emissions"
+        },
+        {
+          "id": "evapVaporPressure",
+          "label": "Evap System Vapour Pressure",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "32",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {
+            "divisor": 4,
+            "signed": true
+          },
+          "unit": "none",
+          "minimum": -8192,
+          "maximum": 8191,
+          "summary": "Fuel tank vapour pressure, in pascals either side of atmospheric. Negative is vacuum. The evaporative leak test works by pulling a vacuum and watching whether it holds.",
+          "category": "emissions"
+        },
+        {
           "id": "frictionTorque",
           "label": "Friction Torque",
           "header": "7E0",
@@ -665,6 +701,21 @@
           "maximum": 100,
           "summary": "Second throttle position sensor. Drive-by-wire uses two and compares them; a disagreement is a fault.",
           "category": "air"
+        },
+        {
+          "id": "timeSinceCleared",
+          "label": "Time Since Codes Cleared",
+          "header": "7E0",
+          "mode": "01",
+          "pid": "4E",
+          "byteOffset": 0,
+          "byteCount": 2,
+          "conversion": {},
+          "unit": "min",
+          "minimum": 0,
+          "maximum": 65535,
+          "summary": "Running time since trouble codes were last cleared. Reads in minutes and stops at 65,535 rather than wrapping.",
+          "category": "emissions"
         },
         {
           "id": "timeWithMIL",

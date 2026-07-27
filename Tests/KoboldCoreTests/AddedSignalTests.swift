@@ -96,6 +96,38 @@ final class AddedSignalTests: XCTestCase {
         XCTAssertEqual(try decode("warmupsSinceCleared", [7]), 7, accuracy: 0.01)
     }
 
+    /// Two's complement, which the standard spells out for this PID and which
+    /// read unsigned turns a small vacuum into a large positive pressure.
+    func testEvapVapourPressureIsSigned() throws {
+        // $8000 is the documented minimum: −8192 Pa.
+        XCTAssertEqual(try decode("evapVaporPressure", [0x80, 0x00]), -8192, accuracy: 0.01)
+        // $7FFF is the documented maximum: 8191.75 Pa.
+        XCTAssertEqual(try decode("evapVaporPressure", [0x7F, 0xFF]), 8191.75, accuracy: 0.01)
+        // $FFFF is −1 count, not +16,383 — the whole point of the flag.
+        XCTAssertEqual(try decode("evapVaporPressure", [0xFF, 0xFF]), -0.25, accuracy: 0.001)
+        XCTAssertEqual(try decode("evapVaporPressure", [0x00, 0x00]), 0, accuracy: 0.01)
+    }
+
+    /// `signed` travels through JSON. It defaults to false, so a profile that
+    /// asked for it and silently did not get it would decode plausibly and
+    /// wrongly — the failure mode that makes this worth pinning.
+    func testSignedSurvivesEncodingRoundTrip() throws {
+        let conversion = Conversion.linear(LinearConversion(divisor: 4, signed: true))
+        let data = try JSONEncoder().encode(conversion)
+        XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("\"signed\":true"))
+
+        guard case .linear(let decoded) = try JSONDecoder().decode(Conversion.self, from: data)
+        else { return XCTFail("not linear") }
+        XCTAssertTrue(decoded.signed)
+    }
+
+    func testEvapPurgeAndTimeSinceCleared() throws {
+        XCTAssertEqual(try decode("evapPurge", [0xFF]), 100, accuracy: 0.01)
+        // The spec is explicit that this counter is minutes, not seconds.
+        XCTAssertEqual(try decode("timeSinceCleared", [0x01, 0x00]), 256, accuracy: 0.01)
+        XCTAssertEqual(try definition("timeSinceCleared").unit, .minute)
+    }
+
     /// Every added signal must carry the things the UI now promises: a readable
     /// name, a sentence explaining it, and a category to file it under.
     func testEverySignalIsPresentableToAPerson() throws {

@@ -117,13 +117,27 @@ final class VehicleCapabilityTests: XCTestCase {
     }
 
     func testGapsGroupByCategory() throws {
-        // 70/72 are air, 32 is emissions — all still undecoded.
-        let capability = VehicleCapability(supported: [0x70, 0x72, 0x32],
-                                           profile: try profile())
+        // Picks its own examples rather than naming PIDs. Hard-coded ones keep
+        // becoming decoded as the profile grows, and the test then fails for a
+        // reason that has nothing to do with grouping.
+        let resolved = try profile()
+        let decodable = Set(resolved.signals.values.compactMap { UInt8($0.pid, radix: 16) })
+        func gap(in category: SignalCategory) throws -> UInt8 {
+            try XCTUnwrap((UInt8(1)...UInt8(0xA9)).first { pid in
+                !decodable.contains(pid)
+                    && !StandardPIDCatalogue.isBankSelector(pid)
+                    && StandardPIDCatalogue.entry(for: pid)?.category == category
+            }, "no undecoded \(category.label) PID left to test with")
+        }
+
+        let capability = VehicleCapability(supported: [try gap(in: .air),
+                                                       try gap(in: .emissions)],
+                                           profile: resolved)
         let grouped = capability.gapsByCategory
 
         XCTAssertEqual(grouped.first?.category, .air, "air sorts before emissions")
         XCTAssertEqual(Set(grouped.map(\.category)), [.air, .emissions])
+        XCTAssertEqual(grouped.map(\.gaps.count), [1, 1])
     }
 
     // MARK: - Mode 09
