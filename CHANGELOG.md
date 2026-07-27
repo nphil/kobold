@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.2
+
+### Fixes
+
+- hide signals the vehicle reports it does not support (`809ab1f`)
+
+**Full changelog:** `v0.15.1...v0.15.2`
+
 ## v0.15.1
 
 ### Fixes
