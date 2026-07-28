@@ -1,4 +1,5 @@
 import SwiftUI
+import KoboldCore
 
 /// The material every surface in the app is cut from.
 ///
@@ -213,6 +214,70 @@ extension View {
     }
 }
 
+// MARK: - Rearranging
+
+/// Where each card's slot is, collected up the view tree.
+///
+/// A preference rather than a geometry reader around the whole grid, because
+/// the grid is lazy and a wrapper cannot know the frames of cells it has not
+/// laid out yet.
+struct SlotFramesKey: PreferenceKey {
+    // Computed, so there is no mutable static state for strict concurrency to
+    // object to later.
+    static var defaultValue: [SignalID: CGRect] { [:] }
+
+    static func reduce(value: inout [SignalID: CGRect],
+                       nextValue: () -> [SignalID: CGRect]) {
+        value.merge(nextValue()) { _, newer in newer }
+    }
+}
+
+/// The Home Screen's "these are movable now" wobble.
+///
+/// Earned rather than borrowed: pressing and holding puts the dashboard into a
+/// mode where a tap means something different from what it meant a second ago,
+/// and a mode change that silently redefines every gesture on screen needs to
+/// be visible from the corner of the eye. It is also the one affordance every
+/// iPhone owner already knows.
+///
+/// The amplitude and period vary with the card's position. Cards wobbling in
+/// perfect unison reads as one sheet of paper flapping rather than as a set of
+/// loose objects, which is the opposite of what it is there to say.
+///
+/// A rotation is a transform, so this costs a matrix per card per frame and
+/// never a redraw. It is switched off outright under Reduce Motion — the whole
+/// effect is unnecessary movement, which is precisely what that setting means.
+struct Wiggle: ViewModifier {
+    let isActive: Bool
+    let seed: Int
+
+    @State private var swung = false
+
+    private var amplitude: Double { 0.5 + Double(seed % 3) * 0.14 }
+    private var period: Double { 0.13 + Double(seed % 4) * 0.011 }
+
+    func body(content: Content) -> some View {
+        content
+            // Driven off `isActive` as well as the phase, so switching the mode
+            // off returns the card to square immediately rather than leaving it
+            // parked wherever the repeating animation happened to be.
+            .rotationEffect(.degrees(isActive ? (swung ? amplitude : -amplitude) : 0))
+            .animation(isActive
+                       ? .easeInOut(duration: period).repeatForever(autoreverses: true)
+                       : .easeOut(duration: 0.16),
+                       value: swung)
+            .animation(.easeOut(duration: 0.16), value: isActive)
+            .onAppear { swung = isActive }
+            .onChange(of: isActive) { _, active in swung = active }
+    }
+}
+
+extension View {
+    func wiggle(_ isActive: Bool, seed: Int) -> some View {
+        modifier(Wiggle(isActive: isActive, seed: seed))
+    }
+}
+
 // MARK: - Spatial continuity
 
 /// Zoom transitions, where the platform has them.
@@ -227,10 +292,27 @@ extension View {
 /// 18. Availability is fixed at runtime, so the branch never changes under a
 /// view and cannot cost it its identity.
 extension View {
+    /// Marks this view as the thing the sheet grows out of.
+    ///
+    /// `shape` is not optional and not defaulted, because getting it wrong is
+    /// the failure this whole extension exists to avoid rather than a detail.
+    /// The system morphs the sheet into the source's *clip shape*, and a shape
+    /// that does not match what is drawn leaves the sheet's own background
+    /// showing in the difference — square corners around a rounded tile, or a
+    /// tall black rectangle around a round dial, for the length of the
+    /// dismissal. It reads as a flicker, which is the last thing anyone would
+    /// think to blame a clip shape for.
+    ///
+    /// Apply it to the drawn object, never to the frame the object sits in. A
+    /// dial inside a `maxHeight: .infinity` frame has a source region the
+    /// height of the screen, and the sheet will faithfully shrink into all of
+    /// it before disappearing.
     @ViewBuilder
-    func zoomSource(id: some Hashable, in namespace: Namespace.ID) -> some View {
+    func zoomSource(id: some Hashable,
+                    in namespace: Namespace.ID,
+                    shape: some Shape) -> some View {
         if #available(iOS 18.0, *) {
-            matchedTransitionSource(id: id, in: namespace)
+            matchedTransitionSource(id: id, in: namespace) { $0.clipShape(shape) }
         } else {
             self
         }

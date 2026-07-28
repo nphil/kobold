@@ -29,6 +29,28 @@ struct DashboardView: View {
     /// that was pressed rather than arriving from nowhere.
     @Namespace private var cardTransition
 
+    /// The card being dragged, where it is relative to its slot, and where each
+    /// slot is. Only meaningful while editing.
+    @State private var dragging: SignalID?
+    @State private var dragOffset: CGSize = .zero
+    @State private var dragBase: CGSize = .zero
+    @State private var slotFrames: [SignalID: CGRect] = [:]
+    /// The slot the dragged card currently belongs to. Read once at the start
+    /// of the drag, when the offset is known to be zero, and then advanced by
+    /// hand on each reorder — never re-measured, because by then the card is
+    /// drawn somewhere else.
+    @State private var dragHome: CGRect = .zero
+
+    /// Named so the drag and the slot frames agree on an origin. The grid's own
+    /// space rather than `.global`, so nothing shifts when the header changes
+    /// height — an error banner appearing mid-drag would otherwise move every
+    /// slot out from under the finger.
+    private static let gridSpace = "dashboardGrid"
+
+    /// The tiles' outline, in one place: the panel draws it, and the zoom
+    /// transition has to morph into exactly the same curve.
+    private static let tileShape = RoundedRectangle(cornerRadius: 15, style: .continuous)
+
     var body: some View {
         ZStack {
             Fascia()
@@ -65,10 +87,7 @@ struct DashboardView: View {
         // Long press is the whole entry point: nothing on the driving surface
         // advertises editing, because a control you can nudge at a glance is a
         // control you can nudge by accident.
-        .onLongPressGesture(minimumDuration: 0.6) {
-            guard !isEditing else { return }
-            withAnimation(KoboldMotion.ui) { isEditing = true }
-        }
+        .onLongPressGesture(minimumDuration: 0.6) { beginEditing() }
         .sheet(isPresented: $showSignalPicker) {
             SignalPickerView(available: pickableSignals) { signal in
                 withAnimation(KoboldMotion.ui) {
@@ -114,6 +133,18 @@ struct DashboardView: View {
         .sensoryFeedback(trigger: isEditing) { was, now in
             now && !was ? .selection : nil
         }
+        // Lifting a card, and every slot it displaces on the way. Both are what
+        // the Home Screen does, and both are the confirmation that a drag has
+        // taken hold — without them a card that has not started moving yet is
+        // indistinguishable from one that never will.
+        .sensoryFeedback(trigger: dragging) { was, now in
+            was == nil && now != nil ? .impact(weight: .light, intensity: 0.7) : nil
+        }
+        .sensoryFeedback(trigger: layout.signals) { _, _ in
+            dragging != nil ? .selection : nil
+        }
+        .onChange(of: isEditing) { _, editing in if !editing { endAnyDrag() } }
+        .onChange(of: inspecting) { _, _ in endAnyDrag() }
         .task { loadLayout() }
         // The car narrows the signal set partway through connecting, long after
         // this view built its layout. Without this, a card for something the
@@ -170,21 +201,6 @@ struct DashboardView: View {
             get: { layout.cards.first { $0.signal == card.signal }?.presentation ?? card.presentation },
             set: { layout.setPresentation($0, for: card.signal); persist() }
         )
-    }
-
-    /// Handles a drop: moves the dragged card so it takes the target's place.
-    private func reorder(dragged: String?, onto target: SignalID) -> Bool {
-        guard let dragged,
-              let from = layout.signals.firstIndex(of: SignalID(dragged)),
-              let to = layout.signals.firstIndex(of: target),
-              from != to
-        else { return false }
-
-        withAnimation(KoboldMotion.ui) {
-            layout.move(from: from, to: to)
-            persist()
-        }
-        return true
     }
 
     /// Maps raw drag distance onto glow intensity using UIKit's own rubber-band
@@ -398,15 +414,24 @@ struct DashboardView: View {
                     TachometerView(signal: signal, caption: signal.label.uppercased())
                         .padding(12)
                         .instrumentWell(shape: Circle())
+                        // On the dial, not on the frame it lives in. The frame
+                        // is the height of everything left over after the
+                        // header and the tiles, and a sheet dismissing into
+                        // *that* is a black rectangle standing behind a round
+                        // gauge for the length of the animation.
+                        .zoomSource(id: card.signal, in: cardTransition, shape: Circle())
                 } else {
                     DashboardCardView(card: card, signal: signal, isEditing: isEditing)
+                        .zoomSource(id: card.signal, in: cardTransition, shape: Self.tileShape)
                 }
             }
+            // Deliberately does not wiggle. It is the only card that cannot be
+            // rearranged, and a wobble is a promise that it can be. The edit
+            // badges are what put it in the mode.
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             .onTapGesture { if !isEditing { inspecting = card.signal } }
             .overlay(alignment: .topTrailing) { editBadges(for: card) }
-            .zoomSource(id: card.signal, in: cardTransition)
             .accessibilityAddTraits(.isButton)
             .accessibilityHint("Shows recent history")
         } else {
@@ -422,26 +447,37 @@ struct DashboardView: View {
             columns: [GridItem(.adaptive(minimum: 104), spacing: 10)],
             spacing: 10
         ) {
-            ForEach(Array(layout.cards.dropFirst()), id: \.id) { card in
+            ForEach(Array(layout.cards.dropFirst().enumerated()), id: \.element.id) { index, card in
                 if let signal = session.bus.signal(card.signal) {
+                    let isMoving = dragging == card.signal
+
                     DashboardCardView(card: card, signal: signal, isEditing: isEditing)
+                        .background(slotReader(card.signal))
+                        .wiggle(isEditing && !reduceMotion && !isMoving, seed: index + 1)
+                        // Lifted off the panel while it travels, and above its
+                        // neighbours so it passes over them rather than through.
+                        .scaleEffect(isMoving ? 1.07 : 1)
+                        .offset(isMoving ? dragOffset : .zero)
+                        .zIndex(isMoving ? 1 : 0)
                         .contentShape(Rectangle())
                         .onTapGesture { if !isEditing { inspecting = card.signal } }
+                        // Simultaneous so it never competes with the tap, and
+                        // idempotent so the identical gesture on the panel
+                        // behind can fire too without the mode flapping.
+                        .simultaneousGesture(
+                            LongPressGesture(minimumDuration: 0.6)
+                                .onEnded { _ in beginEditing() }
+                        )
+                        // Attached always and masked out when not editing, so
+                        // enabling it costs no view identity — a conditional
+                        // modifier here would tear the card down and back up
+                        // every time the mode flips, restarting its sparkline.
+                        .gesture(reorderGesture(for: card.signal),
+                                 including: isEditing ? .all : .subviews)
                         .overlay(alignment: .topTrailing) { editBadges(for: card) }
-                        .zoomSource(id: card.signal, in: cardTransition)
+                        .zoomSource(id: card.signal, in: cardTransition, shape: Self.tileShape)
                         .accessibilityAddTraits(.isButton)
                         .accessibilityHint("Shows recent history")
-                        // String rather than a custom Transferable: the payload
-                        // is one identifier and a bespoke type would be
-                        // ceremony around a value that already round-trips.
-                        .draggable(card.signal.rawValue) {
-                            DashboardCardView(card: card, signal: signal, isEditing: false)
-                                .frame(width: 120)
-                                .opacity(0.9)
-                        }
-                        .dropDestination(for: String.self) { items, _ in
-                            reorder(dragged: items.first, onto: card.signal)
-                        }
                 }
             }
 
@@ -449,6 +485,87 @@ struct DashboardView: View {
                 addCardTile
             }
         }
+        .coordinateSpace(name: Self.gridSpace)
+        .onPreferenceChange(SlotFramesKey.self) { slotFrames = $0 }
+        // The whole point of the thing: when the order changes, every card
+        // that has to move animates to its new slot rather than teleporting.
+        // Driven by the value rather than by `withAnimation` at the call site,
+        // so it also covers a card being added or removed.
+        .animation(reduceMotion ? .linear(duration: 0.12) : KoboldMotion.ui,
+                   value: layout.signals)
+    }
+
+    private func beginEditing() {
+        guard !isEditing else { return }
+        withAnimation(KoboldMotion.ui) { isEditing = true }
+    }
+
+    /// Leaves no card stranded mid-lift.
+    ///
+    /// A drag ends by being let go, but it can also end by the mode ending
+    /// under it — a sheet arriving, or Done being pressed with a finger still
+    /// down. Without this the card stays scaled up and offset from its slot
+    /// with nothing left to put it back.
+    private func endAnyDrag() {
+        guard dragging != nil else { return }
+        withAnimation(reduceMotion ? .linear(duration: 0.12) : KoboldMotion.ui) {
+            dragging = nil
+            dragOffset = .zero
+            dragBase = .zero
+        }
+    }
+
+    /// Reports where a card's slot is, in the grid's own coordinate space.
+    private func slotReader(_ signal: SignalID) -> some View {
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: SlotFramesKey.self,
+                value: [signal: proxy.frame(in: .named(Self.gridSpace))]
+            )
+        }
+    }
+
+    /// Drag to reorder, in the shape the Home Screen set.
+    ///
+    /// The card follows the finger while the others give way underneath it,
+    /// rather than nothing happening until a drop lands. That difference is the
+    /// entire feel of it: a drop-based reorder gives no feedback about where
+    /// the card will end up until it is already there.
+    private func reorderGesture(for signal: SignalID) -> some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named(Self.gridSpace))
+            .onChanged { value in
+                if dragging != signal {
+                    dragging = signal
+                    dragBase = .zero
+                    dragHome = slotFrames[signal] ?? .zero
+                }
+                dragOffset = CGSize(width: dragBase.width + value.translation.width,
+                                    height: dragBase.height + value.translation.height)
+
+                guard let target = GridReorder.target(at: value.location,
+                                                      in: slotFrames, excluding: signal),
+                      let from = layout.signals.firstIndex(of: signal),
+                      let to = layout.signals.firstIndex(of: target),
+                      let landing = slotFrames[target]
+                else { return }
+
+                // `move` takes the card out and puts it back at `to`, so it
+                // ends up in exactly the slot the target is vacating. Take that
+                // distance back out of the offset and the card stays where the
+                // finger left it while everything else rearranges around it.
+                let shift = GridReorder.slotShift(from: dragHome, to: landing)
+                dragBase.width -= shift.width
+                dragBase.height -= shift.height
+                dragHome = landing
+                dragOffset = CGSize(width: dragBase.width + value.translation.width,
+                                    height: dragBase.height + value.translation.height)
+
+                layout.move(from: from, to: to)
+            }
+            .onEnded { _ in
+                endAnyDrag()
+                persist()
+            }
     }
 
     /// Remove and re-present controls, shown only while editing.
