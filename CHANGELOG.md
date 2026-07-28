@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.0
+
+**Full changelog:** `v0.26.0...v0.26.0`
+
 ## v0.25.0
 
 **Full changelog:** `v0.25.0...v0.25.0`
