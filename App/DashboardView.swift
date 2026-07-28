@@ -60,7 +60,45 @@ struct DashboardView: View {
     /// because a squircle does not converge on a circle at the limit.
     private static let dialShape = RoundedRectangle(cornerRadius: 1_000, style: .circular)
 
+    /// Split into three named pieces rather than one chain.
+    ///
+    /// Not a style preference. Swift infers a SwiftUI body as a single
+    /// expression whose type is the whole nest of `ModifiedContent`, and the
+    /// cost of that grows fast enough that a long enough chain stops compiling
+    /// altogether — "unable to type-check this expression in reasonable time",
+    /// reported against `var body` with no hint as to which modifier tipped it
+    /// over. This body reached that point at roughly twenty modifiers.
+    ///
+    /// Splitting it costs nothing at runtime: each piece is still one opaque
+    /// type, and the compiler now solves three small problems instead of one
+    /// enormous one.
     var body: some View {
+        panel
+            .modifier(DashboardSheets(session: session,
+                                      layout: $layout,
+                                      showSignalPicker: $showSignalPicker,
+                                      showDiagnostics: $showDiagnostics,
+                                      showVehicleDiagnostics: $showVehicleDiagnostics,
+                                      showCapability: $showCapability,
+                                      inspecting: $inspecting,
+                                      transition: cardTransition,
+                                      onChange: persist))
+            .modifier(DashboardHaptics(phase: session.phase,
+                                       isEditing: isEditing,
+                                       dragging: dragging,
+                                       order: layout.signals))
+            .preferredColorScheme(.dark)
+            .onChange(of: isEditing) { _, editing in if !editing { endAnyDrag() } }
+            .onChange(of: inspecting) { _, _ in endAnyDrag() }
+            .task { loadLayout() }
+            // The car narrows the signal set partway through connecting, long
+            // after this view built its layout. Without this, a card for
+            // something the vehicle turned out not to report would stay on
+            // screen for the whole session, permanently blank.
+            .onChange(of: session.bus.revision) { loadLayout() }
+    }
+
+    private var panel: some View {
         ZStack {
             Fascia()
 
@@ -97,84 +135,9 @@ struct DashboardView: View {
         // advertises editing, because a control you can nudge at a glance is a
         // control you can nudge by accident.
         .onLongPressGesture(minimumDuration: 0.6) { beginEditing() }
-        .sheet(isPresented: $showSignalPicker) {
-            SignalPickerView(available: pickableSignals) { signal in
-                withAnimation(KoboldMotion.ui) {
-                    layout.add(signal)
-                    persist()
-                }
-            }
-        }
-        .sheet(isPresented: $showDiagnostics) { DiagnosticsView(session: session) }
-        .sheet(isPresented: $showVehicleDiagnostics) {
-            VehicleDiagnosticsView(session: session)
-        }
-        .sheet(isPresented: $showCapability) {
-            VehicleCapabilityView(capability: session.capability,
-                                  profileName: session.profileName)
-        }
-        .sheet(item: $inspecting) { id in
-            if let signal = session.bus.signal(id) {
-                SignalDetailView(signal: signal)
-                    .zoomDestination(id: id, in: cardTransition)
-            }
-        }
-        .preferredColorScheme(.dark)
-        // A small haptic vocabulary, deliberately three words long.
-        //
-        // Connecting and losing the car are the two events worth feeling
-        // without looking, because both happen while the phone is mounted and
-        // the eyes are elsewhere. Everything else on this screen is either a
-        // reading — which would buzz continuously — or a deliberate tap the
-        // finger already knows it made.
-        //
-        // `.sensoryFeedback` rather than a generator held here: it respects the
-        // system haptic setting and Low Power Mode without being asked, which a
-        // hand-rolled `UIImpactFeedbackGenerator` does not.
-        .sensoryFeedback(trigger: session.phase) { _, phase in
-            if phase == .ready { return .success }
-            if case .failed = phase { return .error }
-            return nil
-        }
-        // Rearranging is direct manipulation, so it gets the selection tick
-        // that every other iOS rearrangement has. Only on entering: leaving is
-        // a Done button, which already feels like one.
-        .sensoryFeedback(trigger: isEditing) { was, now in
-            now && !was ? .selection : nil
-        }
-        // Lifting a card, and every slot it displaces on the way. Both are what
-        // the Home Screen does, and both are the confirmation that a drag has
-        // taken hold — without them a card that has not started moving yet is
-        // indistinguishable from one that never will.
-        .sensoryFeedback(trigger: dragging) { was, now in
-            was == nil && now != nil ? .impact(weight: .light, intensity: 0.7) : nil
-        }
-        .sensoryFeedback(trigger: layout.signals) { _, _ in
-            dragging != nil ? .selection : nil
-        }
-        .onChange(of: isEditing) { _, editing in if !editing { endAnyDrag() } }
-        .onChange(of: inspecting) { _, _ in endAnyDrag() }
-        .task { loadLayout() }
-        // The car narrows the signal set partway through connecting, long after
-        // this view built its layout. Without this, a card for something the
-        // vehicle turned out not to report would stay on screen for the whole
-        // session, permanently blank.
-        .onChange(of: session.bus.revision) { loadLayout() }
     }
 
     // MARK: - Layout
-
-    /// Signals the vehicle has that are not already on the dashboard.
-    ///
-    /// Sorted by display name, not identifier: the list is read by a person, and
-    /// `fuelRailPressureDirect` sorting under F while reading as "Fuel Rail
-    /// Pressure" is the kind of small wrongness that makes a list feel arbitrary.
-    private var pickableSignals: [LiveSignal] {
-        session.bus.availableSignals
-            .filter { !layout.contains($0) }
-            .compactMap { session.bus.signal($0) }
-            .sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
-    }
 
     private func loadLayout() {
         let available = Set(session.bus.availableSignals)
