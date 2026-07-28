@@ -56,6 +56,17 @@ struct DashboardCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .instrumentPanel(isAlarming: signal.isOverRedline && signal.hasReading)
         .opacity(signal.isStale() && !isEditing ? 0.45 : 1)
+        // The third channel, after the numeral and the bezel. Here rather than
+        // on the dashboard because this view already depends on this signal's
+        // value — asking the dashboard which readings are alarming would make
+        // the whole screen re-evaluate on every sample, which is exactly the
+        // coarse invalidation the per-signal design exists to avoid.
+        //
+        // On the crossing only. A reading that sits past its limit would
+        // otherwise buzz for as long as it stayed there.
+        .sensoryFeedback(trigger: signal.isOverRedline) { was, now in
+            now && !was ? .impact(weight: .heavy, intensity: 0.8) : nil
+        }
         .task(id: card.presentation) {
             guard card.presentation == .graph else { return }
             await followTrace()
@@ -71,7 +82,7 @@ struct DashboardCardView: View {
 
     private var header: some View {
         Text(signal.label.uppercased())
-            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .font(KoboldType.label(10, weight: .semibold))
             .tracking(0.7)
             .foregroundStyle(theme.textTertiary)
             .lineLimit(1)
@@ -81,18 +92,23 @@ struct DashboardCardView: View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             if signal.hasReading {
                 Text(display.format(signal.value))
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .font(KoboldType.numeral(22))
                     .monospacedDigit()
+                    // Expanded numerals are wider than rounded ones, and a
+                    // four-digit reading in a two-column grid is exactly the
+                    // case that would otherwise truncate.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
             } else {
                 Text("—")
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .font(KoboldType.numeral(22))
                     .monospacedDigit()
                     .foregroundStyle(theme.textTertiary)
             }
 
             Text(display.symbol)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(KoboldType.label(12))
                 .foregroundStyle(theme.textTertiary)
         }
     }

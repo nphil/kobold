@@ -158,18 +158,20 @@ struct TachometerView: View {
             // as a genuine zero.
             if signal.hasReading {
                 Text(displayedValue)
-                    .font(.system(size: side * 0.155, weight: .semibold, design: .rounded))
+                    .font(KoboldType.numeral(side * 0.155))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
             } else {
                 Text("—")
-                    .font(.system(size: side * 0.155, weight: .semibold, design: .rounded))
+                    .font(KoboldType.numeral(side * 0.155))
                     .monospacedDigit()
                     .foregroundStyle(theme.textTertiary)
             }
 
             Text(captionText)
-                .font(.system(size: side * 0.045, weight: .medium, design: .rounded))
+                .font(KoboldType.label(side * 0.045))
                 .tracking(side * 0.006)
                 .foregroundStyle(theme.textTertiary)
                 .lineLimit(1)

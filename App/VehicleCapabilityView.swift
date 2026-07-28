@@ -28,11 +28,7 @@ struct VehicleCapabilityView: View {
                     )
                 }
             }
-            .background(
-                LinearGradient(colors: [theme.backgroundTop, theme.backgroundBottom],
-                               startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            )
+            .background(Fascia())
             .navigationTitle("Vehicle Coverage")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -164,7 +160,7 @@ struct VehicleCapabilityView: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("\(capability.coveredCount)")
-                    .font(.system(size: 40, weight: .semibold, design: .rounded))
+                    .font(KoboldType.numeral(40))
                     .monospacedDigit()
                     .foregroundStyle(theme.accent)
                 Text("of \(capability.supportedCount) reported readings")

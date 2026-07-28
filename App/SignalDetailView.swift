@@ -77,11 +77,7 @@ struct SignalDetailView: View {
             }
             .padding(18)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                LinearGradient(colors: [theme.backgroundTop, theme.backgroundBottom],
-                               startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            )
+            .background(Fascia())
             .navigationTitle(signal.label)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -103,17 +99,19 @@ struct SignalDetailView: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if signal.hasReading {
                 Text(display.format(signal.value))
-                    .font(.system(size: 44, weight: .semibold, design: .rounded))
+                    .font(KoboldType.numeral(44))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
             } else {
                 Text("—")
-                    .font(.system(size: 44, weight: .semibold, design: .rounded))
+                    .font(KoboldType.numeral(44))
                     .foregroundStyle(theme.textTertiary)
             }
 
             Text(display.symbol)
-                .font(.system(size: 17, weight: .medium, design: .rounded))
+                .font(KoboldType.label(17))
                 .foregroundStyle(theme.textTertiary)
 
             Spacer(minLength: 0)

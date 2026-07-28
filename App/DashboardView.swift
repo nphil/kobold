@@ -25,11 +25,13 @@ struct DashboardView: View {
     @State private var isEditing = false
     @State private var showSignalPicker = false
 
+    /// Ties a tile to the sheet it opens, so the sheet grows out of the tile
+    /// that was pressed rather than arriving from nowhere.
+    @Namespace private var cardTransition
+
     var body: some View {
         ZStack {
-            LinearGradient(colors: [theme.backgroundTop, theme.backgroundBottom],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
+            Fascia()
 
             // No ScrollView. The dashboard is a panel, not a document: it sizes
             // to the screen, and the tachometer absorbs whatever space is left
@@ -86,9 +88,32 @@ struct DashboardView: View {
         .sheet(item: $inspecting) { id in
             if let signal = session.bus.signal(id) {
                 SignalDetailView(signal: signal)
+                    .zoomDestination(id: id, in: cardTransition)
             }
         }
         .preferredColorScheme(.dark)
+        // A small haptic vocabulary, deliberately three words long.
+        //
+        // Connecting and losing the car are the two events worth feeling
+        // without looking, because both happen while the phone is mounted and
+        // the eyes are elsewhere. Everything else on this screen is either a
+        // reading — which would buzz continuously — or a deliberate tap the
+        // finger already knows it made.
+        //
+        // `.sensoryFeedback` rather than a generator held here: it respects the
+        // system haptic setting and Low Power Mode without being asked, which a
+        // hand-rolled `UIImpactFeedbackGenerator` does not.
+        .sensoryFeedback(trigger: session.phase) { _, phase in
+            if phase == .ready { return .success }
+            if case .failed = phase { return .error }
+            return nil
+        }
+        // Rearranging is direct manipulation, so it gets the selection tick
+        // that every other iOS rearrangement has. Only on entering: leaving is
+        // a Done button, which already feels like one.
+        .sensoryFeedback(trigger: isEditing) { was, now in
+            now && !was ? .selection : nil
+        }
         .task { loadLayout() }
         // The car narrows the signal set partway through connecting, long after
         // this view built its layout. Without this, a card for something the
@@ -217,7 +242,7 @@ struct DashboardView: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Kobold")
-                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .font(KoboldType.label(26, weight: .semibold))
                     .foregroundStyle(theme.textPrimary)
                 Text(session.profileName)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
@@ -274,9 +299,7 @@ struct DashboardView: View {
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
-            .background(Capsule().fill(theme.surfaceRaised))
-            .overlay(Capsule().strokeBorder(failed ? theme.danger.opacity(0.6) : theme.hairline,
-                                            lineWidth: 1))
+            .instrumentPanel(cornerRadius: 16, tint: failed ? theme.danger : nil)
         }
         .animation(KoboldMotion.ui, value: ready)
         .accessibilityLabel("Data source, currently \(session.source.label)")
@@ -363,7 +386,18 @@ struct DashboardView: View {
         if let card = layout.cards.first, let signal = session.bus.signal(card.signal) {
             Group {
                 if card.presentation == .gauge {
+                    // Sunk into the fascia while the tiles below sit proud of
+                    // it. One dial recessed and everything else raised is how a
+                    // real cluster says which instrument is the main one,
+                    // without a label, a size jump or a colour doing the work.
+                    //
+                    // The padding is the bezel: the ring of panel between the
+                    // dial's outer track and the wall of the recess. Without it
+                    // the two edges land on top of each other and the dial
+                    // reads as cropped rather than as mounted.
                     TachometerView(signal: signal, caption: signal.label.uppercased())
+                        .padding(12)
+                        .instrumentWell(shape: Circle())
                 } else {
                     DashboardCardView(card: card, signal: signal, isEditing: isEditing)
                 }
@@ -372,6 +406,7 @@ struct DashboardView: View {
             .contentShape(Rectangle())
             .onTapGesture { if !isEditing { inspecting = card.signal } }
             .overlay(alignment: .topTrailing) { editBadges(for: card) }
+            .zoomSource(id: card.signal, in: cardTransition)
             .accessibilityAddTraits(.isButton)
             .accessibilityHint("Shows recent history")
         } else {
@@ -393,6 +428,7 @@ struct DashboardView: View {
                         .contentShape(Rectangle())
                         .onTapGesture { if !isEditing { inspecting = card.signal } }
                         .overlay(alignment: .topTrailing) { editBadges(for: card) }
+                        .zoomSource(id: card.signal, in: cardTransition)
                         .accessibilityAddTraits(.isButton)
                         .accessibilityHint("Shows recent history")
                         // String rather than a custom Transferable: the payload
@@ -449,8 +485,7 @@ struct DashboardView: View {
             .font(.system(size: 10, weight: .bold))
             .foregroundStyle(tint)
             .frame(width: 22, height: 22)
-            .background(Circle().fill(theme.surfaceRaised))
-            .overlay(Circle().strokeBorder(theme.hairline, lineWidth: 1))
+            .instrumentPanel(cornerRadius: 11)
     }
 
     private var addCardTile: some View {
@@ -465,9 +500,14 @@ struct DashboardView: View {
             }
             .foregroundStyle(theme.textSecondary)
             .frame(maxWidth: .infinity, minHeight: 74)
-            .background(
+            // An empty bay rather than a dashed rectangle: the same recess the
+            // hero sits in, with nothing mounted in it yet. It reads as a space
+            // for an instrument, which is what it is.
+            .instrumentWell(cornerRadius: 15)
+            .overlay(
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .strokeBorder(theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .strokeBorder(theme.hairline.opacity(0.7),
+                                  style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
             )
         }
     }
@@ -483,6 +523,7 @@ struct DashboardView: View {
                 Image(systemName: "waveform.path.ecg")
                     .font(.system(size: 10, weight: .semibold))
                 Text(session.samplesPerSecond, format: .number.precision(.fractionLength(0)))
+                    .font(KoboldType.numeral(11, weight: .medium))
                     .monospacedDigit()
                 Text("val/s")
             }
@@ -492,6 +533,7 @@ struct DashboardView: View {
                 Image(systemName: "gauge.with.needle")
                     .font(.system(size: 10, weight: .semibold))
                 Text(frameRate.framesPerSecond, format: .number.precision(.fractionLength(0)))
+                    .font(KoboldType.numeral(11, weight: .medium))
                     .monospacedDigit()
                 Text("/ \(frameRate.maximumFramesPerSecond) fps")
             }

@@ -40,11 +40,7 @@ struct SignalPickerView: View {
                     list
                 }
             }
-            .background(
-                LinearGradient(colors: [theme.backgroundTop, theme.backgroundBottom],
-                               startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            )
+            .background(Fascia())
             .navigationTitle("Add a signal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

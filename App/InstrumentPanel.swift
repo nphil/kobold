@@ -100,6 +100,96 @@ struct InstrumentPanel: ViewModifier {
     }
 }
 
+/// The same material, cut the other way: a recess rather than a raised tile.
+///
+/// This is the grammar the whole screen turns on. In a real cluster the small
+/// readouts sit proud of the fascia and the main dial is sunk into it, and that
+/// difference is legible from a metre away without reading anything. Here it is
+/// exactly one thing inverted — the light now catches the *far* wall of the
+/// recess, so the bright edge is at the bottom-trailing corner and the near wall
+/// casts a shadow down over the top of the face.
+///
+/// Getting this backwards is the classic mistake, and it does not read as
+/// "slightly off": a recess lit from above pops back out and becomes a raised
+/// tile with strange edges. The direction of the light is the entire signal.
+struct InstrumentWell<S: InsettableShape>: ViewModifier {
+    @Environment(\.theme) private var theme
+
+    /// Generic over the shape rather than taking a corner radius, because the
+    /// hero's recess is a circle and asking for one by passing a 999-point
+    /// radius relies on a clamp that `.continuous` corners do not promise.
+    let shape: S
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                ZStack {
+                    // Darker than the fascia around it, and darkest at the top,
+                    // where the near wall is in the way of the light.
+                    shape.fill(
+                        LinearGradient(colors: [theme.backgroundBottom, theme.surface],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                    shape.fill(
+                        LinearGradient(
+                            stops: [
+                                .init(color: theme.bevelDark, location: 0),
+                                .init(color: .clear, location: 0.24),
+                            ],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                }
+            }
+            .overlay {
+                shape.strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: theme.bevelDark, location: 0),
+                            .init(color: theme.hairline, location: 0.55),
+                            .init(color: theme.bevelLight, location: 1),
+                        ],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+            }
+    }
+}
+
+/// The panel everything else is mounted on.
+///
+/// Three static layers: the base gradient, the room's light coming from the
+/// same corner the tiles are lit from, and a vignette so the fascia curves away
+/// at the edges instead of running flat to the bezel. Without the first two the
+/// tiles are lit by a light source the screen never establishes, which is the
+/// difference between a scene and a set of decorated rectangles.
+struct Fascia: View {
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        GeometryReader { proxy in
+            let diagonal = max(proxy.size.width, proxy.size.height)
+
+            ZStack {
+                LinearGradient(colors: [theme.backgroundTop, theme.backgroundBottom],
+                               startPoint: .top, endPoint: .bottom)
+
+                RadialGradient(colors: [theme.bevelLight.opacity(0.5), .clear],
+                               center: UnitPoint(x: 0.16, y: -0.04),
+                               startRadius: 0, endRadius: diagonal * 0.72)
+
+                RadialGradient(colors: [.clear, theme.bevelDark.opacity(0.75)],
+                               center: .center,
+                               startRadius: diagonal * 0.24, endRadius: diagonal * 0.78)
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 extension View {
     /// Cuts this surface from the instrument panel material.
     func instrumentPanel(cornerRadius: CGFloat = 15,
@@ -107,6 +197,52 @@ extension View {
                          tint: Color? = nil) -> some View {
         modifier(InstrumentPanel(cornerRadius: cornerRadius,
                                  isAlarming: isAlarming, tint: tint))
+    }
+
+    /// Sinks this surface into the fascia.
+    func instrumentWell(cornerRadius: CGFloat = 26) -> some View {
+        modifier(InstrumentWell(
+            shape: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        ))
+    }
+
+    /// Sinks this surface into the fascia, in a shape of its own — a round
+    /// recess for a round dial.
+    func instrumentWell(shape: some InsettableShape) -> some View {
+        modifier(InstrumentWell(shape: shape))
+    }
+}
+
+// MARK: - Spatial continuity
+
+/// Zoom transitions, where the platform has them.
+///
+/// The tile you press should become the sheet, rather than a sheet arriving
+/// from somewhere else while the tile stays behind — with a dozen readings on
+/// screen, "which one am I looking at" is a real question and the animation is
+/// what answers it. Justified by function, which is the bar docs/06 sets for
+/// this: it is spatial continuity, not decoration.
+///
+/// Gated because the deployment target is iOS 17 and the transition arrived in
+/// 18. Availability is fixed at runtime, so the branch never changes under a
+/// view and cannot cost it its identity.
+extension View {
+    @ViewBuilder
+    func zoomSource(id: some Hashable, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18.0, *) {
+            matchedTransitionSource(id: id, in: namespace)
+        } else {
+            self
+        }
+    }
+
+    @ViewBuilder
+    func zoomDestination(id: some Hashable, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18.0, *) {
+            navigationTransition(.zoom(sourceID: id, in: namespace))
+        } else {
+            self
+        }
     }
 }
 

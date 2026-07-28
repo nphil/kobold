@@ -78,19 +78,19 @@ struct CompactGaugeView: View {
                 Text(display.format(signal.value))
                     // Sized against the dial rather than fixed, so the value
                     // stays proportionate whatever the grid gives the card.
-                    .font(.system(size: side * 0.26, weight: .semibold, design: .rounded))
+                    .font(KoboldType.numeral(side * 0.26))
                     .monospacedDigit()
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .foregroundStyle(signal.isOverRedline ? theme.danger : theme.textPrimary)
             } else {
                 Text("—")
-                    .font(.system(size: side * 0.26, weight: .semibold, design: .rounded))
+                    .font(KoboldType.numeral(side * 0.26))
                     .foregroundStyle(theme.textTertiary)
             }
 
             Text(display.symbol)
-                .font(.system(size: side * 0.11, weight: .medium, design: .rounded))
+                .font(KoboldType.label(side * 0.11))
                 .foregroundStyle(theme.textTertiary)
                 .lineLimit(1)
         }

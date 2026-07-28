@@ -27,11 +27,7 @@ struct VehicleDiagnosticsView: View {
                 case .ready: results
                 }
             }
-            .background(
-                LinearGradient(colors: [theme.backgroundTop, theme.backgroundBottom],
-                               startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            )
+            .background(Fascia())
             .navigationTitle("Diagnostics")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

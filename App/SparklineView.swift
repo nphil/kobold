@@ -55,6 +55,18 @@ struct SparklineView: View {
 
             let tint = isAlarming ? theme.danger : theme.accent
 
+            // The floor of the window, drawn first and under everything.
+            //
+            // A trace with nothing behind it floats: the eye has no reference
+            // for whether the line is high or low, only for whether it went up.
+            // One rule at the bottom of the plotted range is the cheapest thing
+            // that makes it a chart instead of a squiggle.
+            var floor = Path()
+            floor.move(to: CGPoint(x: 0, y: size.height - 0.5))
+            floor.addLine(to: CGPoint(x: size.width, y: size.height - 0.5))
+            context.stroke(floor, with: .color(theme.dialTrack),
+                           style: StrokeStyle(lineWidth: 1))
+
             context.fill(
                 fill,
                 with: .linearGradient(
@@ -66,6 +78,19 @@ struct SparklineView: View {
 
             context.stroke(line, with: .color(tint),
                            style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+
+            // Now, marked. Every point on this line is the past except the last
+            // one, and on a card that is being glanced at, which end is "now"
+            // has to be answerable without thinking about it. Two rings rather
+            // than a dot: the outer one is the panel colour, so the marker stays
+            // separate from the trace even where the line doubles back under it.
+            let now = position(points[points.count - 1])
+            context.fill(Path(ellipseIn: CGRect(x: now.x - 3.2, y: now.y - 3.2,
+                                                width: 6.4, height: 6.4)),
+                         with: .color(theme.surface))
+            context.fill(Path(ellipseIn: CGRect(x: now.x - 2.1, y: now.y - 2.1,
+                                                width: 4.2, height: 4.2)),
+                         with: .color(tint))
         }
         // Decorative detail of a value VoiceOver already reads from the card.
         .accessibilityHidden(true)

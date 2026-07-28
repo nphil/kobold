@@ -133,6 +133,36 @@ extension EnvironmentValues {
     }
 }
 
+/// The app's two voices.
+///
+/// One rule, and it is worth stating as a rule because it is the whole
+/// typographic identity: **numbers are instrument type, words are UI type.**
+///
+/// Live readings are set in SF Pro Expanded. Wide numerals are what an
+/// instrument cluster looks like — the width axis is doing the job a custom
+/// display face would do in docs/06, without shipping a font file, losing
+/// Dynamic Type, or falling back silently on a system that lacks it. Set beside
+/// SF Rounded labels the pairing is deliberate rather than accidental: the two
+/// are obviously different, so neither reads as a mistake.
+///
+/// Rounded stays everywhere words go, which is most of the app. Reversing this
+/// — expanded labels, rounded numerals — would be the same two faces and would
+/// look like a template, because the width would then be decorating the part of
+/// the screen nobody is reading at a glance.
+enum KoboldType {
+
+    /// A live value. Always paired with `.monospacedDigit()` at the call site,
+    /// so a changing reading does not shuffle its own layout.
+    static func numeral(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+        .system(size: size, weight: weight).width(.expanded)
+    }
+
+    /// A name, a unit, a caption — anything made of words.
+    static func label(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {
+        .system(size: size, weight: weight, design: .rounded)
+    }
+}
+
 /// The app's motion signature.
 ///
 /// Three registers, kept apart on purpose, because they answer different

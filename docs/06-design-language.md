@@ -61,6 +61,41 @@ The bar under a reading is a `ScaleBar`, in the same grammar as the dials. A pro
 - Graduations are **cut out of the lit bar** in the colour of the gap behind the panel, not drawn over the track — so they appear only where there is something to measure, the way a segmented cluster bar lights up.
 - The redline zone is stated on the scale itself, so a limit is visible *before* it is reached rather than announced once it has been.
 
+### Raised and recessed
+
+The grammar the screen turns on, and the reason it reads as a cluster rather than as a list of boxes. In a real instrument panel the small readouts sit **proud** of the fascia and the main dial is **sunk into** it, and that difference is legible from a metre away without reading anything.
+
+`InstrumentWell` is exactly `InstrumentPanel` with the light inverted: the bright edge moves to the bottom-trailing corner (the far wall of the recess is what catches the light), the face darkens toward the top instead of away from it, and the near wall casts a shadow down over it. Getting this backwards does not read as slightly off — a recess lit from above pops back out and becomes a raised tile with strange edges. *The direction of the light is the entire signal.*
+
+It is generic over its shape rather than taking a corner radius, because the hero's recess is a circle and asking for one with a 999-point radius relies on a clamp that `.continuous` corners do not promise. The dial's padding inside the well is the bezel — without it the two edges land on each other and the dial reads as cropped rather than as mounted.
+
+The **empty card slot** uses the same recess: an empty instrument bay, which is what it is, rather than a dashed rectangle.
+
+### The fascia establishes the light
+
+Three static layers behind everything: the base gradient, the room's light coming from the same corner the tiles are lit from, and a vignette so the panel curves away at the edges instead of running flat to the bezel. Without the first two, the tiles are lit by a light source the screen never establishes — which is the difference between a scene and a set of decorated rectangles. Every screen in the app uses it, so a sheet is the same panel seen closer rather than a different app.
+
+## Type: numbers are instrument type, words are UI type
+
+One rule, and it is the whole typographic identity. `KoboldType` has exactly two members.
+
+- **Live readings** are SF Pro **Expanded**. Wide numerals are what an instrument cluster looks like; the width axis does the job a custom display face would, without shipping a font file, losing Dynamic Type, or falling back silently on a system that lacks it. Always paired with `.monospacedDigit()`.
+- **Everything made of words** — names, units, captions, titles — stays SF **Rounded**.
+
+Set beside each other the pairing is deliberate rather than accidental: the two faces are obviously different, so neither reads as a mistake. Reversing it — expanded labels, rounded numerals — would be the same two faces and would look like a template, because the width would then be decorating the part of the screen nobody is reading at a glance.
+
+Expanded numerals are wider than rounded ones, so every reading that shares a row carries `.minimumScaleFactor` — a four-digit value in a two-column grid is exactly the case that would otherwise truncate.
+
+## Motion and touch
+
+**Spatial continuity.** A tile is a `matchedTransitionSource` and the detail sheet is a `.zoom` destination, so the tile you pressed becomes the sheet rather than a sheet arriving from elsewhere while the tile stays behind. With a dozen readings on screen, "which one am I looking at" is a real question and the animation is what answers it — justified by function, which is the bar. Gated to iOS 18; availability is fixed at runtime, so the branch never changes under a view and cannot cost it its identity.
+
+**A haptic vocabulary, three words long.** Connecting (`.success`) and losing the car (`.error`) are the two events worth feeling without looking, because both happen while the phone is mounted and the eyes are elsewhere. Entering rearrange mode is `.selection`, the tick every other iOS rearrangement has. Crossing a redline is a heavy `.impact`, on the crossing only — a reading that sits past its limit would otherwise buzz for as long as it stayed there.
+
+Everything else on the dashboard is either a reading, which would buzz continuously, or a deliberate tap the finger already knows it made. Use `.sensoryFeedback` rather than holding a generator: it respects the system haptic setting and Low Power Mode without being asked, which `UIImpactFeedbackGenerator` does not.
+
+The redline haptic belongs on the **card**, not the dashboard — asking the dashboard which readings are alarming would make the whole screen re-evaluate on every sample, which is the coarse invalidation the per-signal design exists to avoid.
+
 ### The edge is the second channel
 
 Past the redline the whole bezel warms to `danger`. Per the F1 note below, a critical state must be confirmed redundantly — and on a surface that is glanced at, an alarm carried only by the colour of a numeral is carried by the one element the eye has to land on precisely in order to read.

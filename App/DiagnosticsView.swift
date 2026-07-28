@@ -36,11 +36,7 @@ struct DiagnosticsView: View {
                 recentSection
             }
             .scrollContentBackground(.hidden)
-            .background(
-                LinearGradient(colors: [theme.backgroundTop, theme.backgroundBottom],
-                               startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            )
+            .background(Fascia())
             .navigationTitle("Diagnostics")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

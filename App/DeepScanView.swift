@@ -48,11 +48,7 @@ struct DeepScanView: View {
                     list
                 }
             }
-            .background(
-                LinearGradient(colors: [theme.backgroundTop, theme.backgroundBottom],
-                               startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            )
+            .background(Fascia())
             .navigationTitle("Deep Scan")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -145,7 +141,7 @@ struct DeepScanView: View {
     private func tally(_ label: String, _ count: Int, _ colour: Color) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("\(count)")
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .font(KoboldType.numeral(15))
                 .monospacedDigit()
                 .foregroundStyle(colour)
             Text(label)
