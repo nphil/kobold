@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.26.1",
+          "date": "2026-07-28",
+          "localizedDescription": "## v0.26.1\n\n### Fixes\n\n- split the dashboard body so it type-checks again (`e1f36ed`)\n- describe the hero's recess the one way a zoom transition allows (`bff77a7`)\n- import CoreGraphics for the geometry Linux hands out for free (`7c2c82d`)\n- match the zoom transition to what is drawn, and rearrange live (`22789f2`)\n\n### Documentation\n\n- update changelog for v0.26.0 [skip ci] (`795e730`)\n\n**Full changelog:** `v0.26.0...v0.26.1`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.26.1/Kobold-0.26.1-unsigned.ipa",
+          "size": 964359,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.26.0",
           "date": "2026-07-28",
           "localizedDescription": "## v0.26.0\n\n### Features\n\n- finish the design pass the language doc already specified (`339b80d`)\n\n### Documentation\n\n- update changelog for v0.25.0 [skip ci] (`2f4cd8b`)\n\n**Full changelog:** `v0.25.0...v0.26.0`",
