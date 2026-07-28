@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.26.2",
+          "date": "2026-07-28",
+          "localizedDescription": "## v0.26.2\n\n### Fixes\n\n- stop the hero gauge being clipped out of existence (`336b72c`)\n\n### Documentation\n\n- update changelog for v0.26.1 [skip ci] (`d95ff17`)\n\n**Full changelog:** `v0.26.1...v0.26.2`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.26.2/Kobold-0.26.2-unsigned.ipa",
+          "size": 964750,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.26.1",
           "date": "2026-07-28",
           "localizedDescription": "## v0.26.1\n\n### Fixes\n\n- split the dashboard body so it type-checks again (`e1f36ed`)\n- describe the hero's recess the one way a zoom transition allows (`bff77a7`)\n- import CoreGraphics for the geometry Linux hands out for free (`7c2c82d`)\n- match the zoom transition to what is drawn, and rearrange live (`22789f2`)\n\n### Documentation\n\n- update changelog for v0.26.0 [skip ci] (`795e730`)\n\n**Full changelog:** `v0.26.0...v0.26.1`",
