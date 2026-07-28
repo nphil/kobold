@@ -105,6 +105,20 @@ public final class LiveSignal {
         guard let redline else { return false }
         return value >= redline
     }
+
+    /// Where the redline sits within the range, 0…1, or `nil` when there is
+    /// none — the number every gauge needs to draw its limit band.
+    ///
+    /// Here rather than in each gauge because three of them were computing it
+    /// from `range` and `redline` identically, and a fourth would have made it
+    /// four. Unlike the value, it never changes, so a gauge that draws its
+    /// redline band from this is drawing something static.
+    public var redlineFraction: Double? {
+        guard let redline else { return nil }
+        let span = range.upperBound - range.lowerBound
+        guard span > 0 else { return nil }
+        return min(1, max(0, (redline - range.lowerBound) / span))
+    }
 }
 
 /// Owns the live signals for the active vehicle profile.

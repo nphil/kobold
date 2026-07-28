@@ -31,7 +31,9 @@ struct DashboardCardView: View {
             switch card.presentation {
             case .number:
                 value
-                rangeBar
+                ScaleBar(fraction: signal.normalised,
+                         redline: signal.redlineFraction,
+                         isAlarming: signal.isOverRedline)
             case .graph:
                 value
                 SparklineView(points: trace, isAlarming: signal.isOverRedline)
@@ -52,11 +54,7 @@ struct DashboardCardView: View {
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(theme.surface))
-        .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(theme.hairline, lineWidth: 1)
-        )
+        .instrumentPanel(isAlarming: signal.isOverRedline && signal.hasReading)
         .opacity(signal.isStale() && !isEditing ? 0.45 : 1)
         .task(id: card.presentation) {
             guard card.presentation == .graph else { return }
@@ -97,19 +95,6 @@ struct DashboardCardView: View {
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(theme.textTertiary)
         }
-    }
-
-    private var rangeBar: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(theme.dialTrack)
-                Capsule()
-                    .fill(signal.isOverRedline ? theme.danger : theme.accent)
-                    .frame(width: max(3, proxy.size.width * signal.normalised))
-                    .animation(KoboldMotion.gauge, value: signal.value)
-            }
-        }
-        .frame(height: 4)
     }
 
     // MARK: - Data

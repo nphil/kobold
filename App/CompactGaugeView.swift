@@ -22,13 +22,6 @@ struct CompactGaugeView: View {
 
     let signal: LiveSignal
 
-    private var redlineFraction: Double? {
-        guard let redline = signal.redline else { return nil }
-        let span = signal.range.upperBound - signal.range.lowerBound
-        guard span > 0 else { return nil }
-        return min(1, max(0, (redline - signal.range.lowerBound) / span))
-    }
-
     private var sweptAngle: Double {
         KoboldDial.startAngle + KoboldDial.sweep * signal.normalised
     }
@@ -48,7 +41,7 @@ struct CompactGaugeView: View {
                             style: StrokeStyle(lineWidth: stroke, lineCap: .round))
 
                 // Under the live arc, so a value past the limit covers it.
-                if let redlineFraction {
+                if let redlineFraction = signal.redlineFraction {
                     DialArc(start: KoboldDial.startAngle + KoboldDial.sweep * redlineFraction,
                             end: KoboldDial.startAngle + KoboldDial.sweep)
                         .stroke(theme.danger.opacity(0.85),

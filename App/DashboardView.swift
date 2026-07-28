@@ -304,11 +304,10 @@ struct DashboardView: View {
                 Spacer(minLength: 0)
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(theme.surface))
-            .overlay(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .strokeBorder(theme.caution.opacity(0.35), lineWidth: 1)
-            )
+            // The same panel as the tiles, edged in caution rather than in
+            // light. A banner that is a different material reads as a different
+            // app's banner pasted in.
+            .instrumentPanel(cornerRadius: 13, tint: theme.caution)
             .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }

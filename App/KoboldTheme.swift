@@ -23,6 +23,12 @@ struct KoboldTheme: Equatable {
     let surface: Color
     let surfaceRaised: Color
     let hairline: Color
+    /// The two edges of a milled bevel: the one facing the light and the one
+    /// turned away from it. Kept as roles rather than a hardcoded white and
+    /// black because a warm theme wants a warm highlight — a neutral one over
+    /// Ember reads as a grey smear rather than as light.
+    let bevelLight: Color
+    let bevelDark: Color
 
     // Text hierarchy.
     let textPrimary: Color
@@ -51,6 +57,8 @@ struct KoboldTheme: Equatable {
         surface: Color(red: 0.09, green: 0.11, blue: 0.15),
         surfaceRaised: Color(red: 0.13, green: 0.15, blue: 0.20),
         hairline: Color(red: 0.20, green: 0.23, blue: 0.29),
+        bevelLight: Color(red: 0.72, green: 0.80, blue: 1.00).opacity(0.22),
+        bevelDark: Color(red: 0.01, green: 0.01, blue: 0.02).opacity(0.55),
         textPrimary: Color(red: 0.95, green: 0.96, blue: 0.98),
         textSecondary: Color(red: 0.66, green: 0.70, blue: 0.78),
         textTertiary: Color(red: 0.42, green: 0.46, blue: 0.54),
@@ -73,6 +81,8 @@ struct KoboldTheme: Equatable {
         surface: Color(red: 0.11, green: 0.12, blue: 0.13),
         surfaceRaised: Color(red: 0.16, green: 0.17, blue: 0.18),
         hairline: Color(red: 0.24, green: 0.25, blue: 0.27),
+        bevelLight: Color(red: 0.88, green: 0.90, blue: 0.92).opacity(0.20),
+        bevelDark: Color(red: 0.01, green: 0.01, blue: 0.01).opacity(0.55),
         textPrimary: Color(red: 0.96, green: 0.96, blue: 0.96),
         textSecondary: Color(red: 0.68, green: 0.69, blue: 0.71),
         textTertiary: Color(red: 0.44, green: 0.45, blue: 0.47),
@@ -94,6 +104,8 @@ struct KoboldTheme: Equatable {
         surface: Color(red: 0.11, green: 0.09, blue: 0.11),
         surfaceRaised: Color(red: 0.16, green: 0.13, blue: 0.15),
         hairline: Color(red: 0.26, green: 0.21, blue: 0.24),
+        bevelLight: Color(red: 1.00, green: 0.88, blue: 0.90).opacity(0.20),
+        bevelDark: Color(red: 0.02, green: 0.01, blue: 0.01).opacity(0.55),
         textPrimary: Color(red: 0.97, green: 0.95, blue: 0.95),
         textSecondary: Color(red: 0.72, green: 0.67, blue: 0.68),
         textTertiary: Color(red: 0.47, green: 0.43, blue: 0.44),

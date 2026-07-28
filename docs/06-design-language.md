@@ -39,6 +39,32 @@ These are small, cheap, and cumulatively decisive:
 | **A custom haptic vocabulary** | A tactile identity — a specific "connected" tap, a redline rumble | Start with the three stock generators; escalate to Core Haptics only when they're insufficient |
 | **Icon Composer layered app icon** | The highest‑leverage brand surface in the Liquid Glass era — a light‑catching instrument motif across all six appearance modes | Needs isolated layers, transparent background, rounded geometry |
 
+## The panel material
+
+Settled, and implemented in `App/InstrumentPanel.swift`. Every surface in the app is cut from one material, because a card here is not a card — it is an instrument set into a panel, and instruments in a cluster are all machined the same way.
+
+The depth is **entirely structural**: a light source above and to the left, a milled edge that catches it, and a face that falls away from it. Three layers, in order:
+
+1. **A lit face** — a vertical gradient from `surfaceRaised` to `surface`. About four percent of lightness across the card: enough that it stops reading as a flat fill, little enough that it never announces itself.
+2. **One specular band** at the corner nearest the light, fading out by 42% across the diagonal. Glass catches light in *one place*; a sheen over the whole face is just a gradient.
+3. **A milled edge** — the border stroked with a gradient from `bevelLight` through `hairline` to `bevelDark`. This is the highest-leverage detail of the three: a uniform one-pixel hairline is precisely what makes a surface read as a rectangle with a border rather than as an object with an edge.
+
+Nothing is layered on top — no drop shadow, no glow, no texture. That restraint is the point rather than a shortcut (see the Taycan note below): ornament reads as cheap on an instrument. It is also why the material costs nothing per frame. Every layer is a static gradient over a fixed shape, so it rasterises once and survives every value change underneath it, unlike a `.shadow` which re-blurs an alpha mask on each redraw.
+
+Two roles exist for it, `bevelLight` and `bevelDark`, rather than a hardcoded white and black — a warm theme wants a warm highlight, and a neutral one over Ember reads as a grey smear rather than as light.
+
+### Scales, not progress bars
+
+The bar under a reading is a `ScaleBar`, in the same grammar as the dials. A progress bar answers "how far through", which is not a question a reading has: a reading has a *position within a range*, with a limit somewhere near the top.
+
+- The track is the same recess (`dialTrack`) the dials sit in, so a tile and a dial read as the same instrument seen two ways.
+- Graduations are **cut out of the lit bar** in the colour of the gap behind the panel, not drawn over the track — so they appear only where there is something to measure, the way a segmented cluster bar lights up.
+- The redline zone is stated on the scale itself, so a limit is visible *before* it is reached rather than announced once it has been.
+
+### The edge is the second channel
+
+Past the redline the whole bezel warms to `danger`. Per the F1 note below, a critical state must be confirmed redundantly — and on a surface that is glanced at, an alarm carried only by the colour of a numeral is carried by the one element the eye has to land on precisely in order to read.
+
 ## Lessons from real instrument clusters
 
 Premium car UIs are a direct, legitimate reference — translated to a phone, not copied:

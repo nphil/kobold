@@ -33,13 +33,6 @@ struct TachometerView: View {
     private let startAngle = KoboldDial.startAngle
     private let sweep = KoboldDial.sweep
 
-    private var redlineFraction: Double? {
-        guard let redline = signal.redline else { return nil }
-        let span = signal.range.upperBound - signal.range.lowerBound
-        guard span > 0 else { return nil }
-        return min(1, max(0, (redline - signal.range.lowerBound) / span))
-    }
-
     private var needleAngle: Double { startAngle + sweep * signal.normalised }
 
     var body: some View {
@@ -55,7 +48,7 @@ struct TachometerView: View {
 
                 // Redline band, drawn under the live arc so a value past the
                 // limit covers it rather than the other way round.
-                if let redlineFraction {
+                if let redlineFraction = signal.redlineFraction {
                     DialArc(start: startAngle + sweep * redlineFraction,
                             end: startAngle + sweep)
                         .stroke(theme.danger.opacity(0.85),

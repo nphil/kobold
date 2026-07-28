@@ -40,6 +40,22 @@ final class LiveSignalTests: XCTestCase {
         XCTAssertTrue(signal.isOverRedline)
     }
 
+    /// Where every gauge draws its limit band. Wrong by a range offset and the
+    /// red zone sits somewhere the car never reaches, which looks correct.
+    func testRedlineFractionIsAPositionWithinTheRange() async {
+        XCTAssertEqual(try XCTUnwrap(makeSignal().redlineFraction), 0.8125, accuracy: 0.0001)
+
+        // A range that does not start at zero is where a naive
+        // `redline / upperBound` quietly disagrees with the needle.
+        let coolant = LiveSignal(id: .coolantTemp, label: "Coolant", unit: .celsius,
+                                 range: (-40)...150, redline: 110)
+        XCTAssertEqual(try XCTUnwrap(coolant.redlineFraction), 150.0 / 190.0, accuracy: 0.0001)
+
+        XCTAssertNil(LiveSignal(id: "x", label: "X", unit: .none, range: 0...10).redlineFraction)
+        XCTAssertNil(LiveSignal(id: "flat", label: "Flat", unit: .none,
+                                range: 5...5, redline: 5).redlineFraction)
+    }
+
     /// A signal that has never reported must read as stale, so the UI dims it
     /// instead of presenting a default zero as a real measurement.
     func testUnreportedSignalIsStale() async {
