@@ -51,14 +51,25 @@ struct DashboardView: View {
     /// transition has to morph into exactly the same curve.
     private static let tileShape = RoundedRectangle(cornerRadius: 15, style: .continuous)
 
-    /// The hero's recess, as the transition is allowed to describe it.
+    /// The hero's recess, as a zoom transition is allowed to describe it.
     ///
-    /// The dial is drawn in a `Circle`, but a zoom transition takes only a
-    /// rounded rectangle. A radius past half the shorter side clamps, and the
-    /// source region here is square, so this is that circle — expressed the one
-    /// way the platform will accept. `.circular` rather than `.continuous`
-    /// because a squircle does not converge on a circle at the limit.
-    private static let dialShape = RoundedRectangle(cornerRadius: 1_000, style: .circular)
+    /// The dial is drawn as a `Circle`, but the transition takes only a rounded
+    /// rectangle — so a circle has to be spelled as "half of a square", which
+    /// means knowing the square. `.circular` rather than `.continuous`, because
+    /// a squircle does not converge on a circle at the limit.
+    ///
+    /// The half-point comes off deliberately. The shape and the frame are both
+    /// derived from the same `side`, but the transition's snapshot bounds are
+    /// rounded to device pixels, so half of the *rounded* width can land a
+    /// fraction below `side / 2` — and a radius over half is the degenerate
+    /// case this whole method exists to avoid. Half a point is under one pixel
+    /// at 3×, so nothing about it is visible.
+    private static func dialShape(side: CGFloat) -> RoundedRectangle {
+        // A geometry reader can report an infinite proposal, and infinity is on
+        // the wrong side of "past half the side" in the worst possible way.
+        guard side.isFinite, side > 1 else { return RoundedRectangle(cornerRadius: 0) }
+        return RoundedRectangle(cornerRadius: side / 2 - 0.5, style: .circular)
+    }
 
     /// Split into three named pieces rather than one chain.
     ///
@@ -379,20 +390,39 @@ struct DashboardView: View {
                     // real cluster says which instrument is the main one,
                     // without a label, a size jump or a colour doing the work.
                     //
-                    // The padding is the bezel: the ring of panel between the
-                    // dial's outer track and the wall of the recess. Without it
-                    // the two edges land on top of each other and the dial
-                    // reads as cropped rather than as mounted.
-                    TachometerView(signal: signal, caption: signal.label.uppercased())
-                        .padding(12)
-                        .instrumentWell(shape: Circle())
-                        // On the dial, not on the frame it lives in. The frame
-                        // is the height of everything left over after the
-                        // header and the tiles, and a sheet dismissing into
-                        // *that* is a black rectangle standing behind a round
-                        // gauge for the length of the animation.
-                        .zoomSource(id: card.signal, in: cardTransition,
-                                    shape: Self.dialShape)
+                    // Measured rather than left to the aspect ratio, because
+                    // the zoom transition needs a corner radius in points and
+                    // there is no radius that means "circular". A radius past
+                    // half the side does not clamp — it degenerates, and the
+                    // source is then drawn as nothing at all. That is how the
+                    // hero came to be invisible except during its own
+                    // dismissal, where the animation draws the real view for a
+                    // moment before handing back to a clip that renders empty.
+                    // A constant large enough to look circular on every device
+                    // is necessarily too large on some of them, so the number
+                    // has to come from the layout.
+                    GeometryReader { proxy in
+                        let side = min(proxy.size.width, proxy.size.height)
+
+                        TachometerView(signal: signal,
+                                       caption: signal.label.uppercased())
+                            // The bezel: the ring of panel between the dial's
+                            // outer track and the wall of the recess. Without
+                            // it the two edges land on each other and the dial
+                            // reads as cropped rather than as mounted.
+                            .padding(12)
+                            // Pinned square, so the radius below is half of a
+                            // side this view actually has.
+                            .frame(width: side, height: side)
+                            .instrumentWell(shape: Circle())
+                            // On the dial, not on the frame it lives in. That
+                            // frame is everything left over after the header
+                            // and the tiles, and a sheet dismissing into it is
+                            // a black rectangle standing behind a round gauge.
+                            .zoomSource(id: card.signal, in: cardTransition,
+                                        shape: Self.dialShape(side: side))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 } else {
                     DashboardCardView(card: card, signal: signal, isEditing: isEditing)
                         .zoomSource(id: card.signal, in: cardTransition, shape: Self.tileShape)
