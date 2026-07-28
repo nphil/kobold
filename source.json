@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.26.0",
+          "date": "2026-07-28",
+          "localizedDescription": "## v0.26.0\n\n### Features\n\n- finish the design pass the language doc already specified (`339b80d`)\n\n### Documentation\n\n- update changelog for v0.25.0 [skip ci] (`2f4cd8b`)\n\n**Full changelog:** `v0.25.0...v0.26.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.26.0/Kobold-0.26.0-unsigned.ipa",
+          "size": 947102,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.25.0",
           "date": "2026-07-28",
           "localizedDescription": "## v0.25.0\n\n### Features\n\n- cut every surface from one instrument panel material (`863bea5`)\n\n### Documentation\n\n- update changelog for v0.24.3 [skip ci] (`165c68e`)\n\n### Build & CI\n\n- build the changelog on the branch tip instead of rebasing onto it (`b34585b`)\n\n**Full changelog:** `v0.24.3...v0.25.0`",
