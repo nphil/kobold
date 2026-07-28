@@ -49,4 +49,29 @@ for file in "${EXTRA[@]}"; do
   [[ -f "$file" ]] || continue
   check "$file" "${BASE[@]}" "$file" || status=1
 done
+
+# CoreGraphics geometry, which Linux is more generous about than Apple is.
+#
+# `CGRect.midX`, `.midY` and `.contains` are CoreGraphics extensions on Apple
+# platforms; corelibs-foundation declares them on the type itself. So a package
+# file using them builds here and fails on macOS — which is exactly the failure
+# this script exists to catch before CI does, and the one shape of it that a
+# Linux type-check structurally cannot.
+#
+# The rule is deliberately coarse: any package source naming a CG type must say
+# what it needs. A stray import costs nothing; the missing one costs a build.
+cg_offenders=()
+while IFS= read -r file; do
+  grep -q "canImport(CoreGraphics)" "$file" || cg_offenders+=("$file")
+done < <(grep -rlE "\bCG(Rect|Point|Size|Vector|Affine)" Sources --include='*.swift' || true)
+
+if (( ${#cg_offenders[@]} )); then
+  for file in "${cg_offenders[@]}"; do
+    echo "FAIL $file names a CoreGraphics type without \`#if canImport(CoreGraphics)\`"
+  done
+  status=1
+else
+  echo "ok   CoreGraphics imports"
+fi
+
 exit $status

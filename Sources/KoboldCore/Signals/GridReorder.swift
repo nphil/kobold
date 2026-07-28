@@ -1,4 +1,12 @@
 import Foundation
+#if canImport(CoreGraphics)
+// `CGRect.midX`, `.midY` and `.contains` are CoreGraphics extensions on Apple
+// platforms — Foundation supplies only the struct. On Linux, corelibs-foundation
+// declares them on the type itself, so a Linux build compiles this file happily
+// and a macOS one does not. Anything in this package that reaches past the
+// stored properties of a CG type needs this import.
+import CoreGraphics
+#endif
 
 /// Which slot a dragging finger is over.
 ///
