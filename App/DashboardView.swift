@@ -51,6 +51,15 @@ struct DashboardView: View {
     /// transition has to morph into exactly the same curve.
     private static let tileShape = RoundedRectangle(cornerRadius: 15, style: .continuous)
 
+    /// The hero's recess, as the transition is allowed to describe it.
+    ///
+    /// The dial is drawn in a `Circle`, but a zoom transition takes only a
+    /// rounded rectangle. A radius past half the shorter side clamps, and the
+    /// source region here is square, so this is that circle — expressed the one
+    /// way the platform will accept. `.circular` rather than `.continuous`
+    /// because a squircle does not converge on a circle at the limit.
+    private static let dialShape = RoundedRectangle(cornerRadius: 1_000, style: .circular)
+
     var body: some View {
         ZStack {
             Fascia()
@@ -419,7 +428,8 @@ struct DashboardView: View {
                         // header and the tiles, and a sheet dismissing into
                         // *that* is a black rectangle standing behind a round
                         // gauge for the length of the animation.
-                        .zoomSource(id: card.signal, in: cardTransition, shape: Circle())
+                        .zoomSource(id: card.signal, in: cardTransition,
+                                    shape: Self.dialShape)
                 } else {
                     DashboardCardView(card: card, signal: signal, isEditing: isEditing)
                         .zoomSource(id: card.signal, in: cardTransition, shape: Self.tileShape)

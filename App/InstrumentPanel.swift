@@ -307,10 +307,17 @@ extension View {
     /// dial inside a `maxHeight: .infinity` frame has a source region the
     /// height of the screen, and the sheet will faithfully shrink into all of
     /// it before disappearing.
+    ///
+    /// `RoundedRectangle` rather than `some Shape` because that is all the
+    /// platform accepts — a `Circle` is an explicit `@available(unavailable)`.
+    /// Spelling the restriction into the signature makes it a compile error
+    /// here rather than one that only an Apple toolchain can find, which
+    /// matters when the package's own build runs on Linux. A circle is a
+    /// rounded rectangle whose radius exceeds half its side; see the hero.
     @ViewBuilder
     func zoomSource(id: some Hashable,
                     in namespace: Namespace.ID,
-                    shape: some Shape) -> some View {
+                    shape: RoundedRectangle) -> some View {
         if #available(iOS 18.0, *) {
             matchedTransitionSource(id: id, in: namespace) { $0.clipShape(shape) }
         } else {
