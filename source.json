@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.25.0",
+          "date": "2026-07-28",
+          "localizedDescription": "## v0.25.0\n\n### Features\n\n- cut every surface from one instrument panel material (`863bea5`)\n\n### Documentation\n\n- update changelog for v0.24.3 [skip ci] (`165c68e`)\n\n### Build & CI\n\n- build the changelog on the branch tip instead of rebasing onto it (`b34585b`)\n\n**Full changelog:** `v0.24.3...v0.25.0`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.25.0/Kobold-0.25.0-unsigned.ipa",
+          "size": 933899,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.24.3",
           "date": "2026-07-27",
           "localizedDescription": "## v0.24.3\n\n### Fixes\n\n- show the hero gauge in the unit that was chosen for the signal (`349246e`)\n\n### Documentation\n\n- update changelog for v0.24.1 [skip ci] (`0978c14`)\n\n**Full changelog:** `v0.24.2...v0.24.3`",
