@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.26.3",
+          "date": "2026-07-29",
+          "localizedDescription": "## v0.26.3\n\n### Fixes\n\n- restore ScaleBar, deleted with the zoom transition (`8769550`)\n- remove the zoom transition and tint the window to the theme (`21afdd4`)\n\n### Documentation\n\n- update changelog for v0.26.2 [skip ci] (`0cec32c`)\n\n**Full changelog:** `v0.26.2...v0.26.3`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.26.3/Kobold-0.26.3-unsigned.ipa",
+          "size": 960940,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.26.2",
           "date": "2026-07-28",
           "localizedDescription": "## v0.26.2\n\n### Fixes\n\n- stop the hero gauge being clipped out of existence (`336b72c`)\n\n### Documentation\n\n- update changelog for v0.26.1 [skip ci] (`d95ff17`)\n\n**Full changelog:** `v0.26.1...v0.26.2`",
