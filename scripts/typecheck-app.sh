@@ -74,4 +74,18 @@ else
   echo "ok   CoreGraphics imports"
 fi
 
+# Project types that are referenced but no longer exist.
+#
+# Nothing here can type-check a SwiftUI `View`, so deleting one and leaving a
+# call to it behind is invisible until CI — which is exactly what happened when
+# a file was truncated at a marker and took `ScaleBar` off the end with it.
+#
+# Grep is enough for this one case: a name the project itself declares either
+# exists somewhere or it does not. Restricted to the project's own naming so
+# the SDK's thousands of types do not drown the signal, and module names are
+# excluded because an `import` is not a reference to a type.
+if ! python3 scripts/check-symbols.py; then
+  status=1
+fi
+
 exit $status
