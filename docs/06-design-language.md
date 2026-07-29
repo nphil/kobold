@@ -35,7 +35,7 @@ These are small, cheap, and cumulatively decisive:
 | **Elevated dark grays over pure black** for cards/surfaces | Depth and stacking order; avoids OLED scroll‑smear | Offer a true‑black "OLED / track" mode as an explicit opt‑in, à la Ivory |
 | **Subtle grain/texture on dark backgrounds** | Depth without spending brightness/contrast budget (a real sunlight‑glare concern for a mounted phone) | Keep it subtle; visible banding at a glance looks like a defect |
 | **One consistent spring "motion personality"** for chrome transitions | Motion becomes a recognizable signature, like a font | Keep it distinct from the *needle's* mechanical settle — they're different physical systems |
-| **`matchedGeometryEffect` / Zoom transitions** for gauge → detail | Spatial continuity: the gauge you tapped expands in place | Justify by function (you tapped *that* gauge), not decoration |
+| ~~**`matchedGeometryEffect` / Zoom transitions** for gauge → detail~~ | Spatial continuity: the gauge you tapped expands in place | **Tried and removed** — see Motion below. Sound in principle; unverifiable in this project, and it shipped an artifact on every attempt |
 | **A custom haptic vocabulary** | A tactile identity — a specific "connected" tap, a redline rumble | Start with the three stock generators; escalate to Core Haptics only when they're insufficient |
 | **Icon Composer layered app icon** | The highest‑leverage brand surface in the Liquid Glass era — a light‑catching instrument motif across all six appearance modes | Needs isolated layers, transparent background, rounded geometry |
 
@@ -88,7 +88,11 @@ Expanded numerals are wider than rounded ones, so every reading that shares a ro
 
 ## Motion and touch
 
-**Spatial continuity.** A tile is a `matchedTransitionSource` and the detail sheet is a `.zoom` destination, so the tile you pressed becomes the sheet rather than a sheet arriving from elsewhere while the tile stays behind. With a dozen readings on screen, "which one am I looking at" is a real question and the animation is what answers it — justified by function, which is the bar. Gated to iOS 18; availability is fixed at runtime, so the branch never changes under a view and cannot cost it its identity.
+**Sheets present the standard way — a zoom transition was tried and removed.** `matchedTransitionSource` morphs the sheet into the source's *clip shape*, and the platform accepts only a `RoundedRectangle` there. The tiles matched exactly and still showed a band of the sheet's own background through the corners; the round hero could only be described as "a radius of half the side", where anything over half does not clamp but degenerates and clips the source to nothing. Three attempts each shipped a new artifact.
+
+The lesson worth keeping is not about that API. It is that this transition can only be judged by watching it, and nothing in this project can — the package builds on Linux and the app target is only ever compiled by CI. A feature whose entire value is how it looks, and whose failure modes are invisible to every check available, is one to leave to the platform. The system sheet was already smooth, which was the original complaint.
+
+**The window is tinted to the theme.** Presenting a sheet scales the screen back and rounds its corners, and what shows in the gap is the window — black unless something says otherwise, which on a dark themed app reads as a hole punched behind the interface. `WindowTint` follows the active theme, so switching to Ember does not leave a cold gap.
 
 **A haptic vocabulary, three words long.** Connecting (`.success`) and losing the car (`.error`) are the two events worth feeling without looking, because both happen while the phone is mounted and the eyes are elsewhere. Entering rearrange mode is `.selection`, the tick every other iOS rearrangement has. Crossing a redline is a heavy `.impact`, on the crossing only — a reading that sits past its limit would otherwise buzz for as long as it stayed there.
 

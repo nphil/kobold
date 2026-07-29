@@ -21,6 +21,10 @@ struct KoboldApp: App {
             DashboardView(session: session, themeID: $themeID)
                 .environment(\.theme, theme)
                 .environment(frameRate)
+                // The gap a sheet presentation opens behind the screen shows
+                // the window, and an untinted window is black. Follows the
+                // theme, so switching to Ember does not leave a cold hole.
+                .windowTint(theme.backgroundBottom)
                 .task {
                     // Goes straight for the adapter. An earlier version opened
                     // in demo mode so the dashboard was never empty, but a

@@ -22,8 +22,6 @@ struct DashboardSheets: ViewModifier {
     @Binding var showCapability: Bool
     @Binding var inspecting: SignalID?
 
-    /// Ties a card to the sheet it opens, so the sheet grows out of the card.
-    let transition: Namespace.ID
     /// Called after the layout is edited, so the change is persisted.
     let onChange: () -> Void
 
@@ -48,7 +46,6 @@ struct DashboardSheets: ViewModifier {
             .sheet(item: $inspecting) { id in
                 if let signal = session.bus.signal(id) {
                     SignalDetailView(signal: signal)
-                        .zoomDestination(id: id, in: transition)
                 }
             }
     }
