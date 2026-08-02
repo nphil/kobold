@@ -19,6 +19,14 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "0.26.4",
+          "date": "2026-08-02",
+          "localizedDescription": "## v0.26.4\n\n### Fixes\n\n- stop four failures from reporting themselves as success (`74de0fe`)\n\n### Documentation\n\n- record the adversarial review and its four confirmed defects (`7fd226a`)\n- update changelog for v0.26.3 [skip ci] (`54758ce`)\n\n**Full changelog:** `v0.26.3...v0.26.4`",
+          "downloadURL": "https://github.com/nphil/kobold/releases/download/v0.26.4/Kobold-0.26.4-unsigned.ipa",
+          "size": 965146,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "0.26.3",
           "date": "2026-07-29",
           "localizedDescription": "## v0.26.3\n\n### Fixes\n\n- restore ScaleBar, deleted with the zoom transition (`8769550`)\n- remove the zoom transition and tint the window to the theme (`21afdd4`)\n\n### Documentation\n\n- update changelog for v0.26.2 [skip ci] (`0cec32c`)\n\n**Full changelog:** `v0.26.2...v0.26.3`",
