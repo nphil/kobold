@@ -123,9 +123,30 @@ struct VehicleDiagnosticsView: View {
 
     private var codesSection: some View {
         Section {
+            if !model.codesAnswered {
+                // A partial read must not be reported as a clean one. The
+                // arrays are empty either way, and only one of those is a car
+                // with no faults.
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Could not read trouble codes", systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(theme.caution)
+                    Text("The car did not answer the "
+                         + model.unansweredCodeReads.formatted(.list(type: .and))
+                         + " request. Anything shown below is incomplete — re-read before "
+                         + "concluding the car is clear.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 4)
+            }
+
             if !model.hasAnyCodes {
-                Label("No trouble codes", systemImage: "checkmark.circle")
-                    .foregroundStyle(theme.textSecondary)
+                if model.codesAnswered {
+                    Label("No trouble codes", systemImage: "checkmark.circle")
+                        .foregroundStyle(theme.textSecondary)
+                }
             } else {
                 codeRows("Stored", model.storedCodes,
                          note: "Confirmed faults. These turn the warning light on.")

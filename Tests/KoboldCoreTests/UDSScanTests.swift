@@ -182,6 +182,38 @@ final class UDSScanTests: XCTestCase {
         XCTAssertEqual(progress.nextIdentifier(module: "absEsc", service: 0x22), 8)
     }
 
+    // MARK: - Losing the adapter mid-sweep
+
+    /// The review finding: `sendRaw` refuses before any I/O once the transport
+    /// is gone, so a dropped adapter used to answer every remaining address
+    /// instantly — 65,000 fabricated silences in seconds, each advancing the
+    /// persisted cursor until the module read as fully scanned and could never
+    /// be swept again.
+    func testASweepStopsWhenTheAdapterGoesAwayRatherThanInventingSilence() async throws {
+        let transport = ReplayTransport(fixture: .idlingEngine())
+        let registry = AdapterRegistry()
+        let driver = ELM327Driver(transport: transport,
+                                  descriptor: registry.descriptor(forAdvertisedName: "IOS-Vlink"))
+        try await driver.start()
+
+        let seen = Counter()
+        await driver.scanIdentifiers(transmit: "7D0", receive: "7D8",
+                                     service: 0x22, identifiers: Array(0..<2_000)) { _, _ in
+            // Pull the adapter after the first handful, the way a car being
+            // switched off does.
+            if await seen.increment() == 5 { await transport.disconnect() }
+            return true
+        }
+
+        let probed = await seen.value
+        XCTAssertGreaterThanOrEqual(probed, 5)
+        XCTAssertLessThan(probed, 50,
+                          "the sweep kept going after the link died and recorded \(probed) "
+                          + "addresses it never actually asked")
+
+        await driver.stop()
+    }
+
     // MARK: - A service the module does not implement
 
     /// The waste this exists to stop: three modules each answered "Service not
@@ -260,4 +292,10 @@ final class UDSScanTests: XCTestCase {
         XCTAssertNil(ScanFinding.readableText([0x41, 0x42, 0x00, 0x01, 0x02, 0x03]))
         XCTAssertNil(ScanFinding.readableText([0x41, 0x42]))
     }
+}
+
+/// Counts handler calls across the sweep's concurrent handler closure.
+private actor Counter {
+    private(set) var value = 0
+    func increment() -> Int { value += 1; return value }
 }

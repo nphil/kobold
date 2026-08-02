@@ -41,6 +41,37 @@ final class DiagnosticsModel {
     /// distinguish "this car does not answer that" from "not asked yet".
     private(set) var unavailable: Set<String> = []
 
+    /// The three trouble-code modes, by the label their read is filed under.
+    ///
+    /// Named once because `codesAnswered` has to agree with the call sites in
+    /// `read()`, and a typo between them would silently restore the bug this
+    /// exists to prevent.
+    static let codeLabels = ["stored", "pending", "permanent"]
+
+    /// Whether the trouble-code modes actually replied.
+    ///
+    /// A request that threw and a car with no faults both leave the arrays
+    /// empty, and only one of them has earned a tick. Without this the screen
+    /// rendered "No trouble codes ✓" over a read in which nothing answered —
+    /// a clean bill of health assembled from zero evidence, on the one screen
+    /// someone consults before deciding not to investigate further.
+    var codesAnswered: Bool {
+        Self.codeLabels.allSatisfy { !unavailable.contains($0) }
+    }
+
+    /// The trouble-code reads that did not answer, in the order they are asked.
+    var unansweredCodeReads: [String] {
+        Self.codeLabels.filter { unavailable.contains($0) }
+    }
+
+    /// How many requests came back with an answer this pass.
+    ///
+    /// Counted rather than inferred from the fields, because every field has a
+    /// legitimate empty value — no codes, no monitors, no VIN. "Nothing
+    /// answered" and "everything answered nothing" produce an identical model
+    /// and must not produce an identical screen.
+    private var answered = 0
+
     /// Reads everything, in one pass, from a driver the session already owns.
     ///
     /// Takes the driver rather than opening its own connection: the adapter is
@@ -50,6 +81,7 @@ final class DiagnosticsModel {
         guard state != .reading else { return }
         state = .reading
         unavailable = []
+        answered = 0
 
         Log.info(.session, "Reading vehicle diagnostics")
 
@@ -84,6 +116,16 @@ final class DiagnosticsModel {
         }
         if published.contains(0x0A) {
             ecuName = await text(from: driver, pid: 0x0A, label: "ECU name")
+        }
+
+        // `.failed` was declared and never assigned, so the "Try again" branch
+        // of the screen was dead code and an adapter that had gone to sleep
+        // produced a confident, empty, green result.
+        guard answered > 0 else {
+            state = .failed("Nothing answered. The adapter may have gone to sleep, "
+                            + "or the ignition may be off.")
+            Log.warning(.session, "Diagnostics: no request answered")
+            return
         }
 
         state = .ready
@@ -122,7 +164,10 @@ final class DiagnosticsModel {
 
     private func codes(from driver: ELM327Driver, mode: String, label: String) async -> [String] {
         do {
-            return try await driver.readTroubleCodes(mode: mode)
+            let codes = try await driver.readTroubleCodes(mode: mode)
+            // An empty list here is a real answer — the car said it has none.
+            answered += 1
+            return codes
         } catch {
             unavailable.insert(label)
             return []
@@ -132,7 +177,7 @@ final class DiagnosticsModel {
     private func raw(from driver: ELM327Driver, pid: UInt8, label: String) async -> [UInt8]? {
         do {
             let bytes = try await driver.readRawPID(pid)
-            if bytes == nil { unavailable.insert(label) }
+            if bytes == nil { unavailable.insert(label) } else { answered += 1 }
             return bytes
         } catch {
             unavailable.insert(label)
@@ -143,7 +188,7 @@ final class DiagnosticsModel {
     private func text(from driver: ELM327Driver, pid: UInt8, label: String) async -> String? {
         do {
             let value = try await driver.readVehicleInfoText(pid: pid)
-            if value == nil { unavailable.insert(label) }
+            if value == nil { unavailable.insert(label) } else { answered += 1 }
             return value
         } catch {
             unavailable.insert(label)

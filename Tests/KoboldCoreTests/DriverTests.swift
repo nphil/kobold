@@ -155,6 +155,31 @@ final class ELM327DriverTests: XCTestCase {
         await driver.stop()
     }
 
+    /// The review finding: `sendLocked` raises UNABLE TO CONNECT as a
+    /// `deviceError` before `detectProtocol`'s guard can classify it, so the
+    /// most common ignition-off answer escaped `start()` unrecognised and the
+    /// session told the user to re-seat an adapter that had answered every
+    /// command in the init sequence.
+    func testIgnitionOffIsAProtocolFailureNotAnAdapterFault() async throws {
+        for reply in ["UNABLE TO CONNECT", "CAN ERROR", "BUFFER FULL"] {
+            var fixture = ReplayTransport.Fixture.idlingEngine()
+            fixture.responses["0100"] = [reply]
+            let registry = AdapterRegistry()
+            let driver = ELM327Driver(transport: ReplayTransport(fixture: fixture),
+                                      descriptor: registry.descriptor(forAdvertisedName: "IOS-Vlink"))
+            do {
+                try await driver.start()
+                XCTFail("expected \(reply) to fail negotiation")
+            } catch {
+                // Not `.deviceError`, and not `.adapterSilent`: the adapter is
+                // demonstrably alive, so any verdict about the adapter is a
+                // wrong verdict.
+                XCTAssertEqual(error as? ELM327Error, .protocolNegotiationFailed, reply)
+            }
+            await driver.stop()
+        }
+    }
+
     func testReadsAndDecodesSignalEndToEnd() async throws {
         let (driver, _) = makeDriver()
         try await driver.start()

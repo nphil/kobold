@@ -61,6 +61,19 @@ final class ScanModel {
     /// rightly refuses.
     private var sinceSave = 0
 
+    /// Which run owns the model's state.
+    ///
+    /// A sweep does not stop when `stop()` says so: it is parked inside a BLE
+    /// round trip, and must still finish the probe in flight and send the
+    /// `ATAR` / `ATSH 7DF` restores before it returns. Everything it writes
+    /// after that point belongs to a run the user has already abandoned, and
+    /// without a token to check against, those writes land on whatever run
+    /// replaced it — clearing `isRunning` under a sweep that is genuinely
+    /// going, which takes its Stop button away and orphans its task.
+    ///
+    /// The same pattern `SessionModel` uses, and for the same reason.
+    private var generation = 0
+
     /// Runs of `Service not supported`, for the same reason `sinceSave` is a
     /// property: the sweep reports through a concurrent closure.
     private var serviceRefusals = 0
@@ -146,6 +159,9 @@ final class ScanModel {
         }
     }
 
+    /// Whether a write belongs to the run that currently owns the model.
+    private func isCurrent(_ generation: Int) -> Bool { generation == self.generation }
+
     /// Pushes the working copy to the view, at most a few times a second.
     private func publish(force: Bool = false) {
         let now = Date()
@@ -161,6 +177,7 @@ final class ScanModel {
     }
 
     func stop() {
+        generation += 1
         task?.cancel()
         task = nil
         isRunning = false
@@ -178,6 +195,8 @@ final class ScanModel {
                driver: ELM327Driver,
                onProgress: @escaping @MainActor () -> Void) {
         guard !isRunning else { return }
+        generation += 1
+        let generation = self.generation
         isRunning = true
         currentTarget = target.key
         lastMessage = nil
@@ -195,16 +214,20 @@ final class ScanModel {
             for service in Self.services {
                 if Task.isCancelled { break }
                 await self?.sweep(target: target, service: service,
-                                  driver: driver, onProgress: onProgress)
+                                  driver: driver, onProgress: onProgress,
+                                  generation: generation)
             }
-            self?.finish(target: target)
+            self?.finish(target: target, generation: generation)
         }
     }
 
     private func sweep(target: Target,
                        service: (code: UInt8, label: String, count: UInt32),
                        driver: ELM327Driver,
-                       onProgress: @escaping @MainActor () -> Void) async {
+                       onProgress: @escaping @MainActor () -> Void,
+                       generation: Int) async {
+
+        guard isCurrent(generation) else { return }
 
         let start = working.nextIdentifier(module: target.key, service: service.code)
         guard start < service.count else { return }
@@ -224,8 +247,9 @@ final class ScanModel {
             return await self.absorb(module: target.key, service: service.code,
                                      count: service.count,
                                      identifier: identifier, outcome: outcome,
-                                     onProgress: onProgress)
+                                     onProgress: onProgress, generation: generation)
         }
+        guard isCurrent(generation) else { return }
         onProgress()
     }
 
@@ -234,7 +258,12 @@ final class ScanModel {
                         count: UInt32,
                         identifier: UInt32,
                         outcome: ProbeOutcome,
-                        onProgress: @MainActor () -> Void) -> Bool {
+                        onProgress: @MainActor () -> Void,
+                        generation: Int) -> Bool {
+        // Returning false stops the sweep, which is what a superseded run
+        // should do the moment it next gets the chance.
+        guard isCurrent(generation) else { return false }
+
         working.record(module: module, service: service,
                        identifier: identifier, outcome: outcome)
         currentIdentifier = identifier
@@ -280,7 +309,14 @@ final class ScanModel {
         return !Task.isCancelled
     }
 
-    private func finish(target: Target) {
+    private func finish(target: Target, generation: Int) {
+        // A cancelled sweep reaches here too, and it has nothing to conclude.
+        // Letting it run wrote `isRunning = false` over whatever run had
+        // replaced it, and stated a verdict — "this module genuinely has no
+        // data there" — for a run the user stopped after 200 of 65,536
+        // addresses. `stop()` already leaves the UI in the right state.
+        guard isCurrent(generation) else { return }
+
         isRunning = false
         currentTarget = nil
 
